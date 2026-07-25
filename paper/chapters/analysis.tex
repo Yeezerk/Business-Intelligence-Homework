@@ -1,0 +1,198 @@
+% 分析章节
+
+\section{分析}
+
+\subsection{可解释性分析}
+
+金融风控领域对模型决策透明度有严格的监管要求（如GDPR第22条要求自动化决策提供"涉及逻辑的有意义信息"）。本文从三个互补层面展开可解释性分析：（1）对XGBoost进行精确SHAP归因（TreeExplainer），（2）诊断FT-Transformer的注意力权重分布，（3）在统一置换重要性框架下对比全部模型变体的行为面特征利用（见本节第5.1.4小节）。需要指出，由于本数据集特征经PCA匿名化（各维度的原始业务语义已不可逆丧失），上述可解释性方法能够揭示\textit{哪些PCA成分}对预测贡献最大，但无法将这些成分翻译为业务人员可理解的变量名（如"交易金额"或"商户类别"）——因此，当前分析在方法论上满足可解释性要求，但在法律意义上可能不构成GDPR第22条要求的"有意义的信息"。以下首先呈现XGBoost的SHAP分析。
+
+\subsubsection{SHAP全局特征重要性}
+
+图\ref{fig:shap_summary}展示了XGBoost在测试集子集（$n=1,000$）上的SHAP Beeswarm摘要图。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.72\textwidth]{shap_xgboost_summary.pdf}
+    \caption{XGBoost的SHAP Beeswarm摘要图（$n{=}1000$，TreeExplainer）。V14呈现单特征主导，V12重要性降至V14的约7\%。}
+    \label{fig:shap_summary}
+\end{figure}
+
+分析揭示了三层结构化的特征重要性信息：
+
+\textbf{（1）单特征主导}：V14的平均绝对SHAP值（0.6784）约为第二名V12（0.0475）的14.3倍。这种极端偏斜在金融欺诈检测中具有双重含义：一方面，它简化了模型审计——只需监控少数几个关键PCA成分的分布偏移即可预警模型衰退；另一方面，它也构成了单点故障风险——若攻击者通过对抗手段操纵V14对应的原始特征组合，模型决策可能被系统性绕过。
+
+\textbf{（2）特征交互证据}：V4的散点分布呈现明显的非线性模式——低V4值时SHAP值接近零，高V4值时SHAP值分散为正向和负向两簇。这一"扇形展开"形态是特征交互的典型标志：V4的边际效应依赖于其他特征（如V14）的取值水平。传统的线性重要性排序（如Logistic Regression的系数）无法捕捉此类条件依赖关系。
+
+\textbf{（3）PCA匿名化的分析边界}：V1-V28的具体业务含义无法直接解读，但SHAP重要性排序仍具有操作价值。在实际部署中，可通过以下方式绕过匿名化限制：（a）对高SHAP值特征，在特征工程阶段保留其原始语义版本进行配对分析；（b）利用个体瀑布图逐笔解释拦截决策（见下节），满足监管合规要求。
+
+\subsubsection{个体预测解释}
+
+图\ref{fig:shap_waterfall}展示了正常交易和欺诈交易两个典型案例的SHAP瀑布图。
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{shap_waterfall_legitimate.pdf}
+        \caption{正常交易样本（Class=0）。V14低值等特征将预测概率压低至接近0。}
+        \label{fig:shap_waterfall_legitimate}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{shap_waterfall_fraud.pdf}
+        \caption{欺诈交易样本（Class=1）。V14极高值等特征将预测概率推高至接近1。}
+        \label{fig:shap_waterfall_fraud}
+    \end{subfigure}
+    \caption{个体预测SHAP瀑布图对比：正常交易（左）与欺诈交易（右）的特征贡献路径。}
+    \label{fig:shap_waterfall}
+\end{figure}
+
+瀑布图将黑箱预测分解为可追溯的特征贡献序列。图\ref{fig:shap_waterfall_legitimate}中，正常交易样本的基线预测（E[f(x)]）约为0.07，而V14的低值（相对于训练集均值）贡献了-0.32的负向推动，加上V18（-0.08）和Amount（-0.06）的累积负向效应，最终将预测概率压低至接近0。图\ref{fig:shap_waterfall_fraud}的欺诈案例则展示了镜像模式：V14的极高值贡献+0.42的正向推动，叠加V12（+0.10）和V4（+0.07）的正向效应，将预测概率推至接近1。
+
+这一分析框架直接支持GDPR第22条的合规要求——当风控分析师需解释拦截决策时，可引用具体的特征贡献报告："该交易被标记为高风险的主要原因是V14异常偏高（贡献+0.42），其次为V12偏高（+0.10）。建议人工核验该客户的历史交易模式。"与传统的"黑箱分数"（如"风险评分=87分"）相比，SHAP瀑布图提供的逐特征归因显著增强了决策的可审计性和客户申诉的可处理性。
+
+\subsubsection{FT-Transformer注意力分析}
+
+图\ref{fig:ftt_attention}展示了FT-Transformer中[CLS] Token对Top-20特征的注意力权重。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.78\textwidth]{ftt_attention.pdf}
+    \caption{FT-Transformer的[CLS] Token注意力权重（$n{=}200$）。所有特征注意力高度集中在一个狭窄区间$[0.0327, 0.0342]$（均值0.0334），与均匀分布基线（$1/29{=}0.0345$，灰色虚线）几乎重合，标准差仅0.0004。}
+    \label{fig:ftt_attention}
+\end{figure}
+
+图\ref{fig:ftt_attention}揭示了一个重要发现：FT-Transformer的注意力权重近乎完全均匀。29个特征的注意力值全部集中在$[0.0327, 0.0342]$的极窄区间内（均值0.0334），与均匀分布基线$1/29=0.0345$（图中灰色虚线标注）几乎重合，标准差仅为0.0004。换言之，FT-Transformer的[CLS] Token未能有效区分特征的重要性——它在所有特征上分配了近乎相同的注意力。
+
+交叉对比发现两种方法的特征利用模式截然不同：XGBoost的SHAP极端偏斜（V14单独占超60\%重要性），而FT-Transformer的注意力近乎均匀。这一梯度反映了两种架构在PCA匿名化特征空间中的表现差异：
+
+\begin{itemize}
+    \item \textbf{XGBoost（轴对齐分裂）}天然擅长发现少数高增益特征维度——每个分裂沿单一特征维度进行，不受其他维度干扰，因此在V14这类强判别性PCA成分上迅速聚焦。
+    \item \textbf{FT-Transformer（全局自注意力）}的Softmax注意力缺乏显式的稀疏约束，多头机制虽设计了多个"注意力视角"，但在PCA破坏特征语义关联后，各头无法形成有意义的特征子空间划分，导致注意力退化为近乎均匀的"平均投票"。本文虽已用Sparsemax替代Softmax以引入稀疏性，但实验（第五节）表明该替换的增益有限——注意力塌缩的根源不在于归一化函数的选择，而在于PCA空间本身缺乏可供注意力机制利用的跨特征语义关联。
+\end{itemize}
+
+这一发现直接解释了FT-Transformer为何在深度模型中表现最差：当特征经过PCA匿名化后，全局自注意力的Query-Key内积趋向于同一常数值，注意力权重丧失特征的相对重要性信号。但需要指出，注意力均匀化也可能是Focal Loss（$\alpha=0.25$）的间接效应——$\alpha=0.25$的高正类权重可能将大部分梯度预算分配给分类边界的调整，注意力权重被动地保持在接近初始化的均匀状态。区分"PCA空间导致的注意力塌缩"与"Focal Loss导致的注意力锁定"需要以标准交叉熵（BCE）为对照的消融实验，这超出了当前实验范围。相比之下，DeepFM的显式内积交互$\langle v_i, v_j \rangle$直接建模特征对的协同效应，不依赖"哪些特征更重要"的全局判断，因此在PCA空间中更为稳健。由此，本文的树监督蒸馏方案（见第4.3节）另辟蹊径：不试图在PCA空间中"修复"注意力，而是通过XGBoost教师注入外部特征重要性信号，从数据驱动的"特征重要性学习"转向先验注入的"特征重要性继承"。
+
+\subsubsection{跨模型置换特征重要性对比}
+
+上述SHAP和注意力分析分别以模型特定的视角揭示了XGBoost和FT-Transformer的特征利用模式。然而，三者及其蒸馏变体尚未在同一可解释性框架下直接比较。为此，本文采用模型无关的置换特征重要性（Permutation Feature Importance）——逐一打乱各特征列并测量AUPRC下降幅度——在统一的坐标下对比全部六个模型：教师（XGBoost）、基线学生（DeepFM、FTT）和三种蒸馏变体（DeepFM+KD、FTT+KD、FTT+KD+TreeReg）：
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.98\textwidth]{permutation_importance.pdf}
+    \caption{全模型置换特征重要性对比（$n{=}5$次重复，全量测试集22,613样本）。Panel A：XGBoost教师的特征优先级；Panel B：DeepFM基线vs DeepFM+KD——KD对FM架构的影响；Panel C：FTT基线→FTT+KD→FTT+KD+TreeReg——KD增益与TreeReg破坏的逐级分解。水平柱为AUPRC下降均值$\pm$标准差。}
+    \label{fig:perm_importance}
+\end{figure}
+
+图\ref{fig:perm_importance}和图\ref{fig:perm_importance_corr}揭示了五个层面的跨模型特征利用模式：
+
+\textbf{（1）软标签蒸馏将学生拉向教师的特征排序。}KD对特征重要性排序的影响可通过学生与教师的Pearson相关性量化：对DeepFM，$r(\text{XGBoost, DeepFM})$从基线的0.625提升至KD后的0.845（+0.220）；对FTT，$r(\text{XGBoost, FTT})$从基线的0.793微调至0.771——与DeepFM不同，FTT的KD不通过\textit{复制}教师的特征偏好来获益，而是通过校准质量的大幅改善（ECE从0.0120降至0.0007）实现性能提升。这一对比揭示了KD在不同架构上的两种互补作用机制：（a）对FM架构，KD通过软标签传递了教师的特征优先级结构；（b）对注意力架构，KD主要通过提升概率校准而非重塑特征重要性来增益。
+
+\textbf{（2）TreeReg制造了特征重要性的"XGBoost复刻"但性能崩溃。}FTT+KD+TreeReg与XGBoost的特征重要性排序相关性高达$r{=}0.964$——近乎完美的复刻。然而，这一"对齐"的代价是V14集中度从FTT+KD的17.0\%激增至43.9\%（与XGBoost教师的44.0\%几乎一致），其余特征的重要性被系统性压制——在Top-16特征中，8个特征的置换效应趋近于零或变为负值。TreeReg通过嵌入层范数正则化将教师的轴对齐特征偏好刚性注入注意力架构，使FTT在特征利用行为上趋近于XGBoost——但其AUPRC（0.8974）甚至低于未蒸馏的FTT基线（0.9179），说明单纯模仿教师的特征重要性分布并不能带来性能提升。这一观察与"TreeReg对注意力架构实施了结构性替代（而非仅过强正则化）"的假设一致，但当前证据——尤其是缺乏$\lambda$强度扫描和FTT+KD变体与FTT基线的架构参数差异——尚不足以排除替代解释：（a）$\lambda{=}0.1$可能对该模型容量过强；（b）TreeReg与KD软标签可能存在未预期的交互效应。因此，第4.3.2节的性能崩溃的机制解释应被视为"强相关、与假设一致但因果未闭合"。
+
+\textbf{（3）KD提升跨架构行为相似性。}蒸馏前，$r(\text{DeepFM, FTT})$仅为0.639——FM的显式交互与自注意力的隐性交互在特征利用上存在本质分歧。KD后，$r(\text{DeepFM+KD, FTT+KD})$提升至0.806（+0.167）——两个异质学生从同一位树教师处学到的软标签信号，使它们在"使用了哪些特征"这一行为面上显著趋同。这是跨架构知识迁移的间接证据：软标签不仅传递了决策边界，还隐式传递了教师的特征重要性结构。
+
+\textbf{（4）V14跨架构共识及其蒸馏调制。}全部六个模型均将V14识别为首要特征——其置换效应占总重要性的比例从DeepFM+KD的15.7\%到FTT+KD+TreeReg的43.9\%不等。V4为众口一词的第二重要特征（占比从DeepFM的9.7\%到FTT+KD的34.2\%）。这一跨架构一致性验证了SHAP分析中V14单特征主导的结论——其对预测的贡献不依赖于特定模型的归纳偏置，而是PCA空间中固有的强判别性信号。
+
+\textbf{（5）DeepFM的分布式特征利用经KD后得以保持。}DeepFM基线的重要性呈现出比XGBoost显著更平坦的分布——V14（0.166）仅占总重要性的14.7\%，V3（0.159）和V12（0.157）与之接近。KD后，V14集中度仅微增至15.7\%，模型的分布式特征利用模式基本保持不变——这与DeepFM+KD取得全局最优AUPRC（0.9495）一致：KD在不破坏FM架构的多样化特征交互的前提下，注入了教师的高质量校准信号。
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tabular}{lcccccc}
+    \toprule
+    & \textbf{XGBoost} & \textbf{DeepFM} & \textbf{DFM+KD} & \textbf{FTT} & \textbf{FTT+KD} & \textbf{FTT+KD+T} \\
+    \midrule
+    V14 ($\Delta$AUPRC) & 0.142 & 0.166 & 0.071 & 0.058 & 0.156 & 0.377 \\
+    V4 ($\Delta$AUPRC)  & 0.088 & 0.110 & 0.079 & 0.087 & 0.313 & 0.218 \\
+    V14占比 (\%) & 44.0 & 14.7 & 15.7 & 12.8 & 17.0 & 43.9 \\
+    \midrule
+    $r$(XGBoost, $\cdot$) & 1.000 & 0.625 & 0.845 & 0.793 & 0.771 & 0.964 \\
+    \bottomrule
+    \end{tabular}
+    \caption{置换重要性关键指标对比。V14占比为V14置换效应占该模型全部特征置换效应之和的百分比。$r$为与XGBoost教师的Pearson排序相关系数。FTT+KD+T=FTT+KD+TreeReg。}
+    \label{fig:perm_importance_corr}
+\end{figure}
+
+置换重要性分析补全了本文可解释性矩阵的最后一块拼图——SHAP提供XGBoost的精确归因，注意力揭示FTT的"表达面"特征利用，而置换重要性在统一框架下覆盖全部模型变体的"行为面"特征依赖，并揭示了KD和TreeReg对特征利用模式的截然相反的调制方向：前者在保持架构原生特征分布的前提下注入校准知识，后者则强行重写特征优先级而导致性能崩塌。三者共同构成了从"看了什么"（注意力）到"用了什么"（置换重要性）再到"每个特征贡献了多少"（SHAP）的完整可解释性阶梯。
+
+作为补充，本文亦计算了XGBoost的Shapley Interaction Index（SII），结果再次确认了V14的二阶支配地位——V14参与的特征对（如V14-V12、V14-V4）占据交互热力图的最强信号区域。鉴于PCA匿名化限制下特征对的语义无法映射为业务语言（无法将"V14-V12正向交互"翻译为可操作的业务洞察），且该发现与SHAP一阶分析和置换重要性分析高度冗余，完整的SII热力图及公式从正文中略去，详见补充材料。
+
+\subsection{概率校准分析}
+
+本文以Expected Calibration Error（ECE）量化校准质量：
+
+$$\text{ECE} = \sum_{b=1}^{B} \frac{n_b}{N} |acc(b) - conf(b)|$$
+
+图\ref{fig:calibration}以可靠性图形式展示了全部六个模型的概率校准行为。蓝色柱偏离黑色理想对角线的程度直观对应ECE数值。核心发现有三：（1）\textbf{树模型的天然校准优势}——XGBoost（ECE=0.0006）的柱状图紧贴对角线，每个概率区间的预测置信度几乎完美匹配实际正类率，无需任何后处理即可直接用于风险评分；（2）\textbf{深度模型的校准分化}——FT-Transformer（ECE=0.0120）经Sparsemax替换Softmax后校准显著改善（此前为0.2328），而DeepFM（ECE=0.0394）在低概率区间（0--0.2）出现明显的过自信偏误（蓝色柱低于对角线），这与其$\alpha{=}0.995$的Focal Loss在训练早期对正类的极端梯度倾斜一致；（3）\textbf{蒸馏的校准统一效应}——三个蒸馏变体的可靠性图近乎完全贴合理想对角线（ECE全部$\le$0.001），说明软标签的温度平滑机制在完全不改变模型架构的情况下，系统性地消除了深度模型的概率过自信。值得注意的是，即便AUPRC崩溃的FTT+KD+TreeReg也取得了完美校准（ECE=0.0010），表明软标签传递的决策边界平滑效应与TreeReg对特征空间的刚性约束在机制上完全解耦——前者作用于输出层的不确定性估计，后者作用于嵌入层的特征表达。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.78\textwidth]{calibration_curves.pdf}
+    \caption{全部六个模型的可靠性图。蓝色柱为各概率区间的实际正类率，黑色虚线为完美校准（ECE值标注于子图标题）。蒸馏变体（下排）的柱状图近乎完全贴合理想对角线，直观呈现了软标签对模型过自信的系统性消除。}
+    \label{fig:calibration}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{各模型的Expected Calibration Error。蒸馏使所有学生模型的校准质量大幅提升至$\le$0.001，验证了软标签对模型过度自信的平滑效应。}
+\label{tab:ece}
+\begin{tabular}{lcc}
+\toprule
+\textbf{模型} & \textbf{ECE} & \textbf{校准评价} \\
+\midrule
+XGBoost（教师） & 0.0006 & 优秀 \\
+FT-Transformer（基线） & 0.0120 & 良好 \\
+DeepFM（基线） & 0.0394 & 一般 \\
+\midrule
+\textbf{蒸馏变体} & & \\
+DeepFM + KD & 0.0008 & 优秀 \\
+FTT + KD & 0.0007 & 优秀 \\
+FTT + KD + TreeReg & 0.0010 & 优秀 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表\ref{tab:ece}和表\ref{tab:model_comparison}共同揭示了校准质量的全景。基座模型中，XGBoost（ECE=0.0006）校准优秀，FT-Transformer（ECE=0.0120）经Sparsemax替换Softmax后ECE从不可用的0.2328降至良好水平，DeepFM（ECE=0.0394）受Focal Loss（$\alpha{=}0.995$）的高正类权重影响校准一般。蒸馏后，所有学生模型的ECE全部降至$\le$0.001——即便AUPRC崩溃的FTT+KD+TreeReg（ECE=0.0010）也取得了近乎完美的校准。这一结果验证了Hinton等人\cite{hinton2015distilling}的核心论点：软标签通过平滑类别边界有效降低了深度模型的过度自信，且该效应与架构选择和TreeReg的存在均无关，是知识蒸馏最稳健的收益。
+
+\subsection{商业成本分析}
+
+模型业务价值取决于误报（FP）和漏报（FN）造成的实际经济损失：
+
+$$
+\text{Cost} = C_{FP} \times \text{FP} + C_{FN} \times \text{FN}, \quad C_{FP}=1,\; C_{FN}=10
+$$
+
+10:1的比例参考了银行业欺诈检测的成本估算惯例\cite{dastidar2024survey}。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.78\textwidth]{cost_comparison.pdf}
+    \caption{各模型在成本矩阵（$C_{FP}{=}1$, $C_{FN}{=}10$）下的总成本对比。FTT+KD成本全局最低（97），XGBoost最高（215），蒸馏降低了FT-Transformer的成本（99→97）和DeepFM的成本（123→120）。}
+    \label{fig:cost_comparison}
+\end{figure}
+
+图\ref{fig:cost_comparison}揭示：\textbf{（1）蒸馏显著降低业务成本}——FTT+KD以总成本97取得全局最优（对比FTT基线99），DeepFM+KD（120）亦低于DeepFM基线（123），验证了软标签蒸馏不仅提升精度还改善成本效率；\textbf{（2）AUPRC最优$\neq$成本最优}——DeepFM+KD的AUPRC全局最优（0.9495）但成本（120）高于FTT+KD（97），因后者以更高精确率（0.9364 vs 0.9099）减少了误报损失；\textbf{（3）帕累托前沿}——全部6个模型在精度-成本平面上形成清晰的权衡边界，FTT+KD（右上）与DeepFM+KD（左上）构成两种互补的最优点；\textbf{（4）成本比敏感性}——本文采用$C_{FP}:C_{FN}=1:10$\cite{dastidar2024survey}，若该比例增大（如1:50，适用于高额交易场景），则召回率更高的FTT+KD和FTT（Recall=0.9196）将更具优势，若缩小（如1:2）则XGBoost（Precision=0.9479）占优。因此，具体模型选择需结合银行的实际欺诈损失与审核成本数据。
+
+\subsection{模型选择建议}
+
+综合实验与分析发现，针对不同业务场景的模型选择建议如下：
+
+\begin{table}[htbp]
+\centering
+\caption{面向不同业务需求的模型选择建议。选择逻辑由精度、可解释性、校准质量和成本敏感性四个维度驱动，不存在单一最优模型。}
+\label{tab:model_selection}
+\begin{tabular}{p{3.2cm}p{3.8cm}p{6.8cm}}
+\toprule
+\textbf{业务场景} & \textbf{推荐模型} & \textbf{理由} \\
+\midrule
+追求最高检测精度 & DeepFM+KD & AUPRC=0.9495全局最优，超越教师XGBoost（+1.64pp） \\
+可解释性优先 & XGBoost + SHAP & TreeExplainer精确计算，瀑布图支持逐笔解释 \\
+深度模型+校准双优 & FTT+KD & AUPRC=0.9347，ECE=0.0007，业务成本全局最低（97） \\
+纯树模型部署 & XGBoost & AUPRC=0.9331，ECE$<$0.001，推理微秒级，无GPU依赖 \\
+成本敏感场景 & 依成本比动态选择 & $C_{FN}/C_{FP}>10$时倾向FTT+KD（Cost=97全局最低），$<5$时倾向XGBoost（Precision最高） \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表\ref{tab:model_selection}的选择逻辑体现了本文的核心立场：不存在单一"最佳"模型，模型选择应由业务约束驱动。蒸馏模型的引入显著扩展了可行解空间——DeepFM+KD（AUPRC=0.9495）以超过教师1.64pp的精度成为纯精度导向场景的首选，FTT+KD（AUPRC=0.9347, ECE=0.0007, Cost=97）则实现了精度、校准和成本的最优折衷。具体而言：（1）在监管严格的场景（如欧盟GDPR管辖区），XGBoost+SHAP的可解释性可能比0.01的AUPRC提升更具合规价值；（2）在实时风控系统中，若允许GPU部署则FTT+KD兼顾精度和校准，若限CPU则XGBoost的推理速度（微秒级）和概率校准（ECE=0.0006）使其成为天然首选；（3）在需要频繁模型更新的场景，DeepFM的端到端可微分训练允许增量微调，而KD变体仅需在训练阶段额外存储教师预测即可。这些业务维度的考虑将模型选择从纯技术决策提升为风险管理决策。

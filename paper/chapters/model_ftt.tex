@@ -1,0 +1,142 @@
+% =============================================================================
+% FT-Transformer 原理深度讲解
+% =============================================================================
+
+\subsection{FT-Transformer：特征令牌化与自注意力机制}
+
+FT-Transformer（Feature Tokenizer + Transformer）由Gorishniy等人\cite{gorishniy2021revisiting}于2021年提出，其核心思想是将表格数据的每个数值特征视为一个独立的"词元"（Token），通过Transformer编码器的自注意力机制学习特征间的全局交互。以下从四个层面逐层拆解其工作原理。
+
+\subsubsection{整体架构}
+
+FT-Transformer将表格分类问题转化为类似NLP的序列分类问题：每条数据记录被表示为一个特征令牌序列，模型通过在所有特征上计算成对注意力来捕获特征间关系。图\ref{fig:ftt_arch}以流程图呈现了从原始特征到最终预测的完整数据流。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=0.5cm,
+    box/.style={rectangle, draw=black!70, rounded corners=3pt, minimum width=5.0cm, minimum height=0.62cm, align=center, font=\footnotesize},
+    smallbox/.style={rectangle, draw=black!50, rounded corners=2pt, minimum width=2.2cm, minimum height=0.55cm, align=center, font=\scriptsize},
+    arrow/.style={-{Stealth[scale=1.0]}, thick, black!60},
+]
+    % Main flow
+    \node[box, fill=blue!5] (input) {输入 $\mathbf{x} = [x_1, \dots, x_{29}] \in \mathbb{R}^{29}$};
+    \node[box, fill=blue!8, below=of input] (tokenizer) {Feature Tokenizer: $T_j = x_j \cdot \bm{W}_j + \bm{b}_j$ \quad ($\bm{W}_j,\bm{b}_j \in \mathbb{R}^{64}$)};
+    \node[box, fill=green!5, below=of tokenizer] (cls) {前置 [CLS]: $\mathbf{Z} = [T_{\mathrm{CLS}}, T_1, \dots, T_{29}] \in \mathbb{R}^{30 \times 64}$};
+    \node[box, fill=orange!8, below=of cls] (encoder) {Transformer Encoder $\times 3$\\(多头自注意力 + FFN + 残差连接 + LayerNorm)};
+    \node[box, fill=green!5, below=of encoder] (extract) {提取 [CLS] 表示: $\mathbf{h}_{\mathrm{CLS}}^{(3)} \in \mathbb{R}^{64}$};
+    \node[box, fill=red!5, below=of extract] (head) {LayerNorm $\to$ Linear($64{\to}1$) $\to$ Sigmoid};
+    \node[box, fill=red!8, below=of head] (output) {输出: $\hat{y} \in [0, 1]$ （欺诈概率）};
+
+    % Arrows
+    \draw[arrow] (input) -- (tokenizer);
+    \draw[arrow] (tokenizer) -- (cls);
+    \draw[arrow] (cls) -- (encoder);
+    \draw[arrow] (encoder) -- (extract);
+    \draw[arrow] (extract) -- (head);
+    \draw[arrow] (head) -- (output);
+
+    % Encoder detail callout
+    \node[smallbox, fill=orange!15, right=2.2cm of encoder] (attn) {Multi-Head\\Self-Attention};
+    \node[smallbox, fill=orange!15, right=2.2cm of attn] (ffn) {Feed-Forward\\Network};
+    \draw[arrow, dashed, orange!70] (encoder.east) -- ++(0.4,0) |- (attn.west);
+    \draw[arrow, dashed, orange!70] (encoder.east) -- ++(0.4,0) |- (ffn.west);
+\end{tikzpicture}
+\caption{FT-Transformer架构流程图。29个数值特征经Feature Tokenizer映射为64维嵌入向量，前置可学习的[CLS] Token后送入3层Transformer编码器。[CLS]的最终输出经LayerNorm和线性层得到欺诈概率。右侧虚线框展示编码器内部两大核心组件。}
+\label{fig:ftt_arch}
+\end{figure}
+
+\subsubsection{第一层：Feature Tokenizer——为什么数值需要"嵌入"}
+
+传统做法将表格数据的一行直接输入MLP（$\mathbb{R}^{29} \to \text{Linear}(29, 64)$），这等价于对所有特征使用同一个投影矩阵。FT-Transformer的关键创新在于为每个特征$j$分配独立的可学习参数$\bm{W}_j$和$\bm{b}_j$：
+
+\begin{equation}
+T_j = x_j \cdot \bm{W}_j + \bm{b}_j \in \mathbb{R}^{d_{model}}
+\label{eq:tokenize}
+\end{equation}
+
+其中$\bm{W}_j$的作用不是线性变换（因为$x_j$是标量），而是\textbf{特征专属的嵌入向量}——将标量特征值沿特定方向"拉伸"为$d_{model}$维向量。理解这一设计的关键在于：
+
+\begin{itemize}
+    \item \textbf{异构特征需要异构空间}：V14（强判别性PCA成分）和V25（近噪声成分）的变化量$\Delta x$对最终决策的影响截然不同。若所有特征共享同一投影矩阵，模型将无法区分"重要的0.1"和"不重要的0.1"。Feature Tokenizer使每个特征拥有独立的"语义通道"，其嵌入向量的方向编码了该特征的身份（identity），模长编码了其数值强度。
+    \item \textbf{为注意力提供可区分的Key/Query}：自注意力通过Query-Key内积$\langle \bm{Q}_i, \bm{K}_j \rangle$度量特征$i$对特征$j$的"关注程度"。若特征嵌入是同一线性变换的产物，则所有特征将位于同一低维子空间，Query-Key内积丧失区分度——这正是本文在PCA匿名化数据上观察到的"注意力均匀塌缩"的根本原因。
+\end{itemize}
+
+在本文的实验中，$d_{model}=64$意味着每个标量特征被映射为一个64维向量，29个特征共计产生$29 \times (64 + 64) = 3,\!712$个专属参数。
+
+\subsubsection{第二层：[CLS] Token——从序列到分类的桥梁}
+
+借鉴BERT \cite{devlin2018bert}的设计，FT-Transformer在所有特征令牌前添加一个可学习的[CLS] Token $T_{\mathrm{CLS}} \in \mathbb{R}^{d_{model}}$，形成长度为30的序列：
+
+\begin{equation}
+\mathbf{Z}_0 = [T_{\mathrm{CLS}}, T_1, T_2, \dots, T_{29}] \in \mathbb{R}^{30 \times 64}
+\end{equation}
+
+[CLS] Token的设计哲学是\textbf{信息汇聚}：它自身不携带任何特征信息（随机初始化），但在经过多层自注意力后，它通过Query机制从所有特征令牌中"抽取"了对分类最有用的信息。可以理解为——[CLS]是模型学会的"最佳问题"（optimal query），而每个特征令牌提供的是该特征的"回答"（key-value pair）。最终，仅[CLS]的输出被送入分类头，其余29个特征令牌的输出被丢弃。
+
+\subsubsection{第三层：Multi-Head Self-Attention——特征间的全局对话}
+
+这是FT-Transformer的核心计算引擎。给定输入序列$\mathbf{Z} \in \mathbb{R}^{S \times d}$（$S=30$），单头自注意力执行以下操作：
+
+\textbf{Step 1：线性投影。}将每个令牌分别投影为Query、Key、Value三个向量：
+\begin{equation}
+\mathbf{Q} = \mathbf{Z}\mathbf{W}_Q,\quad \mathbf{K} = \mathbf{Z}\mathbf{W}_K,\quad \mathbf{V} = \mathbf{Z}\mathbf{W}_V
+\end{equation}
+其中$\mathbf{W}_Q, \mathbf{W}_K, \mathbf{W}_V \in \mathbb{R}^{d \times d_k}$，$d_k = d_{model} / n_{heads} = 8$。
+
+\textbf{Step 2：Scaled Dot-Product Attention。}计算每对令牌间的注意力分数：
+\begin{equation}
+\mathrm{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \mathrm{Sparsemax}\!\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right) \mathbf{V}
+\label{eq:attention}
+\end{equation}
+
+除以$\sqrt{d_k}$的目的是防止内积过大导致Sparsemax/Softmax饱和（梯度消失）。30个令牌的注意力矩阵为$\mathbb{R}^{30 \times 30}$——每个特征对其他29个特征（包括[CLS]和自身）分配一个注意力权重。
+
+\textbf{Step 3：Multi-Head 整合。}并行执行$n_{heads}=8$个独立的注意力计算（每头使用不同的$\mathbf{W}_Q, \mathbf{W}_K, \mathbf{W}_V$），将各头输出拼接后线性投影：
+
+\begin{equation}
+\mathrm{MultiHead}(\mathbf{Z}) = \mathrm{Concat}(\mathrm{head}_1, \dots, \mathrm{head}_8) \mathbf{W}_O
+\end{equation}
+
+多头设计使模型能在不同的表示子空间中同时关注不同类型的关系——例如，一个头可能聚焦于V14-V12的相关性，另一个头关注V4-V17的交互。然而，本文的实验发现：在PCA匿名化特征上，各头输出的注意力分布高度相似，表明PCA破坏了供多头分化的语义多样性。
+
+\textbf{Step 4：Transformer Encoder Block。}每个编码器层包含两个子层，每子层均有残差连接和LayerNorm：
+
+\begin{equation}
+\begin{aligned}
+\mathbf{Z}' &= \mathrm{LayerNorm}\big(\mathbf{Z} + \mathrm{MultiHead}(\mathbf{Z})\big) \\
+\mathbf{Z}'' &= \mathrm{LayerNorm}\big(\mathbf{Z}' + \mathrm{FFN}(\mathbf{Z}')\big)
+\end{aligned}
+\end{equation}
+
+其中FFN为两层MLP：$\mathrm{FFN}(\mathbf{x}) = \mathrm{GELU}(\mathbf{x}\mathbf{W}_1 + \mathbf{b}_1)\mathbf{W}_2 + \mathbf{b}_2$，中间维度$d_{ffn}=256$提供4倍于$d_{model}$的容量以进行非线性变换。残差连接确保即使注意力学不到有用信息（如均匀塌缩），梯度仍能通过恒等路径回传，避免深层网络的退化。
+
+\subsubsection{第四层：Sparsemax——本文的关键改进}
+
+原始FT-Transformer使用Softmax归一化注意力权重：
+\begin{equation}
+\mathrm{Softmax}(\mathbf{z})_i = \frac{e^{z_i}}{\sum_j e^{z_j}}
+\end{equation}
+
+Softmax存在两个固有问题：（1）它永远输出全非零的概率分布（$e^{z_i} > 0$恒成立），无法产生真正的稀疏解；（2）当所有$z_i$接近时（如在PCA空间中），输出趋于均匀分布$1/d$。
+
+本文采用Sparsemax \cite{martins2016sparsemax}替代Softmax。Sparsemax将logits向量$\mathbf{z}$投影到概率单纯形（probability simplex）上，产生\textbf{可能包含零值}的稀疏概率分布：
+
+\begin{equation}
+\mathrm{Sparsemax}(\mathbf{z}) = \arg\min_{\mathbf{p} \in \Delta^{d-1}} \|\mathbf{p} - \mathbf{z}\|_2^2
+\end{equation}
+
+其闭式解为$\mathrm{Sparsemax}(\mathbf{z})_i = \max(z_i - \tau(\mathbf{z}), 0)$，其中$\tau(\mathbf{z})$是确保$\sum_i \max(z_i - \tau, 0) = 1$的唯一阈值。算法复杂度为$O(d \log d)$，不增加计算负担。
+
+\textbf{核心差异}：Softmax对低logits值赋予微量但非零的概率（如0.001），Sparsemax直接将其设为零。在表格数据语境中，这意味着特征$j$完全可以被排除在特征$i$的"注意力视野"之外——模型被强制做出选择。本实验证实，Sparsemax将FT-Transformer的AUPRC从0.8738提升至0.9179（+4.4pp），ECE从0.2328降至0.0120（改善约20倍）。
+
+需要指出，本文未分离Sparsemax的稀疏化效应与其隐式的温度/熵调节效应——Sparsemax的投影操作（$\ell_2$范数最小化至单纯形）在降低输出熵的同时引入稀疏性，两者可能独立贡献于AUPRC和ECE的改善。Softmax+温度缩放（temperature scaling）可能以不同机制实现类似的熵调节效果，这一替代路径留待未来验证。
+
+\subsubsection{本文配置与训练细节}
+
+\begin{itemize}
+    \item $d_{model}=64, n_{heads}=8, n_{layers}=3, d_{ffn}=256$
+    \item 总参数量：153,921（合理范围，避免过拟合15万训练样本）
+    \item 优化器：AdamW（lr=$5 \times 10^{-4}$, weight\_decay=$10^{-4}$）
+    \item 损失函数：Focal Loss（$\alpha=0.25, \gamma=2.0$）——$\alpha=0.25$被选为Sparsemax的搭配，因稀疏注意力需要均衡的正负类梯度信号
+    \item 早停：验证集AUPRC连续15轮不提升
+\end{itemize}

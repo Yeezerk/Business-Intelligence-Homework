@@ -1,0 +1,90 @@
+% =============================================================================
+% 第5章：实验结果——塌缩的实证呈现与三种修复
+% =============================================================================
+
+\section{实验结果}
+\label{sec:results}
+
+本章从性能、注意力分布和曲线分析三个层面，呈现四个变体的对照实验结果。本章仅描述"观察到了什么"——深层机制解释留待第\ref{sec:diagnosis}节展开。所有变体均使用Focal Loss处理类别不平衡（欺诈率0.5\%），差异仅来自注意力归一化函数和数据预处理层。
+
+\subsection{整体性能对比}
+
+表\ref{tab:main_results}汇总了四个变体的定量指标。除AUPRC和F1外，引入两个补充维度：AttnStd衡量注意力塌缩程度，ECE衡量概率校准质量。
+
+\begin{table}[H]
+\centering
+\caption{五个FTT变体的性能对比。架构（手写，ReGLU, 203,841参数）完全一致，LOR-MIM变体额外增加305参数。加粗为各列最优值。}
+\label{tab:main_results}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{模型} & \textbf{AUPRC} & \textbf{F1} & \textbf{AttnStd} & \textbf{Cost} & \textbf{ECE} \\
+\midrule
+Softmax            & 0.9126 & 0.9266 & 0.00125 & 115 & 0.2328 \\
+Sparsemax          & 0.9384 & 0.9279 & 0.00942 & \textbf{97} & 0.0120 \\
+LOR-MIM + Softmax  & 0.9242 & \textbf{0.9358} & 0.01401 & 104 & 0.0068 \\
+LOR-MIM + Sparsemax& 0.9267 & 0.9140 & \textbf{0.02064} & 118 & \textbf{0.0066} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表\ref{tab:main_results}揭示了一个关键现象：\textbf{没有任何模型在所有指标上全面占优}。最优AUPRC属于BCE（0.9491），最优F1属于LOR-MIM+Softmax（0.9358），最低业务成本属于Sparsemax（Cost=97），最优校准同样属于BCE（ECE=0.0001，近乎完美）。这一"多指标最优解互不兼容"的模式意味着：在PCA匿名化数据上，排序精度（AUPRC）、硬分类质量（F1）、业务成本（Cost）和概率可靠性（ECE）之间存在着需要业务方根据具体风险偏好进行权衡的内在张力。
+
+值得注意的几组数据：（1）Softmax的ECE高达0.2328——模型对预测概率严重过度自信，这在实际风控中意味着"该交易90\%概率是欺诈"的声明实际上对应的真实欺诈概率远低于90\%；（2）Sparsemax将ECE改善至0.0120（$\sim$20倍），其零截断阻断了低质量权重在多层的噪声累积；（3）BCE不仅AUPRC最高，ECE也几乎完美（0.0001）——无Focal Loss的梯度集中效应，模型在概率校准上反而受益；（4）LOR-MIM的两个变体ECE均在0.007以下，说明数据端对称破缺也附带了校准改善的副产物。BCE的F1（0.9278）和Cost（103）未超越Sparsemax，表明其优势集中在排序和校准层面。
+
+\subsection{注意力权重分布：塌缩与修复}
+
+图\ref{fig:ftt_attention}以2$\times$2网格展示了四个代表性变体的注意力权重分布。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{ftt_attention.pdf}
+    \caption{四个FTT变体的注意力权重分布（$n{=}200$）。Softmax基线塌缩为均匀分布（std=0.00125）；Sparsemax部分恢复稀疏性（std=0.00942）；LOR-MIM+Softmax实现大幅多样性恢复（std=0.01401）；LOR-MIM+Sparsemax多样性最高（std=0.02064）。}
+    \label{fig:ftt_attention}
+\end{figure}
+
+注意到LOR-MIM的两个变体中注意力分布的标准差最大，但零权重特征很少——LOR-MIM通过组内混合使注意力在更多特征上分配非零权重，而非像Sparsemax那样通过截断来集中权重。这与表\ref{tab:main_results}中LOR-MIM+Softmax F1最高但AUPRC并非最优的模式一致：更分散的注意力有利于硬分类（F1），但不一定有利于排序（AUPRC）。
+
+\subsection{多头注意力的同质化}
+
+Softmax基线中任意两个注意力头余弦相似度$>$0.97——8个头功能上近乎等价。Sparsemax替换后降至约0.88，LOR-MIM变体进一步降至约0.82。多头设计的互补目标在PCA空间中基本未能实现。
+
+\subsection{PR曲线与ROC曲线}
+
+Precision-Recall曲线和ROC曲线从不同角度衡量模型的排序性能。在不平衡数据上，两者的区分能力存在根本性差异：ROC-AUC以真负类率（TNR）为横轴，而真负类占样本的99.5\%，使得不同模型在该轴上几乎无法区分；PR曲线以Recall为横轴、Precision为纵轴，两者均聚焦于正类（欺诈），对模型间的排序差异更为敏感\cite{saito2015precision}。图\ref{fig:pr_roc_curves}将四个变体的两条曲线并列呈现，这一并置本身就是对评估指标选择的方法论说明。
+
+PR曲线中，Sparsemax在整个召回区间（尤其是0.3--0.8）系统性地高于Softmax基线和两个LOR-MIM变体，这与表\ref{tab:main_results}中Sparsemax AUPRC最优（0.9384）一致。值得注意的是LOR-MIM+Sparsemax（绿色）在低召回区（$<$0.2）的精确率略高于Sparsemax，但在中高召回区被反超——这表明数据端修复在保守决策区（低召回=只标记最确信的欺诈）可能有一定优势，但在需要覆盖更多欺诈交易的场景下不如纯归一化修复。两个LOR-MIM变体的PR曲线几乎重叠，进一步确认了LOR-MIM与Sparsemax联合使用时存在拮抗效应：组合并未产生相加增益。
+
+ROC曲线中，四个变体几乎完全重叠——AUC极差不足0.005。若仅报告ROC-AUC，不仅Sparsemax的+2.6pp改善被完全掩盖，LOR-MIM变体之间的细微差异也无法分辨。这一对比直接验证了本文以AUPRC作为主评估指标的合理性。
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{pr_curves.pdf}
+        \caption{Precision-Recall曲线}
+        \label{fig:pr_curves}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{roc_curves.pdf}
+        \caption{ROC曲线}
+        \label{fig:roc_curves}
+    \end{subfigure}
+    \caption{四个变体的排序性能曲线。（a）PR曲线：Sparsemax领先。（b）ROC曲线：所有变体近乎重叠。}
+    \label{fig:pr_roc_curves}
+\end{figure}
+
+\FloatBarrier
+
+\subsection{置换特征重要性}
+\label{subsec:permutation}
+
+置换重要性分析（图\ref{fig:permutation_importance}）对比了Softmax、Sparsemax和LOR-MIM+Softmax三个变体的特征依赖性。三者特征排序高度一致（两两Pearson $r>0.9$），V14均为首要特征但占比均$<$15\%。无论使用何种注意力归一化或是否加入LOR-MIM，模型在PCA空间中均呈分布式特征利用模式——这与塌缩诊断一致：当嵌入方向高度同构时，模型无法对单一特征形成集中依赖。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.88\textwidth]{permutation_importance.pdf}
+    \caption{三个FTT变体的置换特征重要性。三者排序高度一致（$r>0.9$），V14为首要特征但占比均未超过15\%。}
+    \label{fig:permutation_importance}
+\end{figure}

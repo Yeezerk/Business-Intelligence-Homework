@@ -1,0 +1,328 @@
+﻿=== academic-paper ===
+---
+name: academic-paper
+description: >
+  学术论文/课程大作业/研究报告的高效写作协作。当用户提到写论文、写大作业、
+  课程报告、学术报告、毕业论文、文献综述、案例分析报告，或需要 LaTeX 排版、
+  生成 .tex 文件、编译 PDF 时触发。即使用户没有明确提到格式，只要任务是
+
+=== academic-paper-reviewer ===
+---
+name: academic-paper-reviewer
+description: "Multi-perspective academic paper review with dynamic reviewer personas. Simulates 5 independent reviewers (EIC + 3 peer reviewers + Devil's Advocate) with field-specific expertise. Supports full review, re-review (verification), quick assessment, methodology focus, Socratic guided, and calibration modes. Triggers on: review paper, peer review, manuscript review, referee report, review my paper, critique paper, simulate review, editorial review, calibrate reviewer, reviewer calibration, measure reviewer accuracy."
+metadata:
+  version: "1.10.0"
+  last_updated: "2026-06-01"
+
+=== academic-pipeline ===
+---
+name: academic-pipeline
+description: "Orchestrator for the full academic research pipeline: research -> write -> integrity check -> review -> revise -> re-review -> re-revise -> final integrity check -> finalize. Coordinates deep-research, academic-paper, and academic-paper-reviewer into a seamless 10-stage workflow with mandatory integrity verification, two-stage peer review, and reproducible quality gates. Triggers on: academic pipeline, research to paper, full paper workflow, paper pipeline, end-to-end paper, research-to-publication, complete paper workflow."
+metadata:
+  version: "3.12.0"
+  last_updated: "2026-06-08"
+
+=== algorithmic-art ===
+---
+name: algorithmic-art
+description: 使用p5.js创建带有种子随机和交互式参数探索的算法艺术。当用户请求使用代码创建艺术、生成艺术、算法艺术、流场或粒子系统时使用此技能。创建原创算法艺术，而不是复制现有艺术家的作品，以避免侵犯版权。
+license: 完整条款见LICENSE.txt
+---
+
+
+=== arch-system-troubleshooter ===
+---
+name: arch-system-troubleshooter
+description: 排查用户Arch Linux系统的各类故障，优先使用本地系统文档和Arch Wiki，禁止普通必应搜索返回非官方结果。使用当用户提到系统故障、滚挂、报错、niri配置问题、Arch异常、命令不对时触发。
+scope: global
+license: MIT
+---
+
+=== brand-guidelines ===
+---
+name: brand-guidelines
+description: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.
+license: Complete terms in LICENSE.txt
+---
+
+
+=== canvas-design ===
+---
+name: canvas-design
+description: 使用设计哲学在 .png 和 .pdf 文档中创建精美的视觉艺术。当用户要求创建海报、艺术品、设计或其他静态作品时应使用此技能。
+license: Complete terms in LICENSE.txt
+---
+
+
+=== chart-generator ===
+---
+name: chart-generator
+description: 按照用户自定义的matplotlib规范和antv MCP工具生成各类可视化图表。使用当用户提到生成图表、柱状图、折线图、饼图、散点图、雷达图、可视化数据时触发。
+scope: global
+license: MIT
+---
+
+=== claude-api ===
+---
+name: claude-api
+description: "Build, debug, and optimize Claude API / Anthropic SDK apps. Apps built with this skill should include prompt caching. Also handles migrating existing Claude API code between Claude model versions (4.5 → 4.6, 4.6 → 4.7, retired-model replacements). TRIGGER when: code imports `anthropic`/`@anthropic-ai/sdk`; user asks for the Claude API, Anthropic SDK, or Managed Agents; user adds/modifies/tunes a Claude feature (caching, thinking, compaction, tool use, batch, files, citations, memory) or model (Opus/Sonnet/Haiku) in a file; questions about prompt caching / cache hit rate in an Anthropic SDK project. SKIP: file imports `openai`/other-provider SDK, filename like `*-openai.py`/`*-generic.py`, provider-neutral code, general programming/ML."
+license: Complete terms in LICENSE.txt
+---
+
+
+=== code-reviewer ===
+---
+name: code-reviewer
+description: 审查代码的安全漏洞、性能问题和最佳实践。用于代码审查、安全审计、代码质量检查、PR审查场景。
+license: MIT
+metadata:
+  author: awesome-llm-apps
+
+=== deep-research ===
+---
+name: deep-research
+description: "Universal deep research agent team. 13-agent pipeline for rigorous academic research on any topic. 7 modes: full research, quick brief, paper review, lit-review, fact-check, Socratic guided research dialogue, and systematic review with optional meta-analysis. Covers research question formulation, Socratic mentoring, methodology design, systematic literature search, source verification, cross-source synthesis, risk of bias assessment, meta-analysis, APA 7.0 report compilation, editorial review, devil's advocate challenges, ethics review, and post-research literature monitoring. Triggers on: research, deep research, literature review, systematic review, meta-analysis, PRISMA, evidence synthesis, fact-check, guide my research, help me think through, 研究, 深度研究, 文獻回顧, 文獻探討, 系統性回顧, 後設分析, 事實查核, 引導我的研究, 幫我釐清, 幫我想想, 我不確定要研究什麼, 研究方向, 研究主題."
+metadata:
+  version: "2.9.4"
+  last_updated: "2026-05-18"
+
+=== doc-coauthoring ===
+---
+name: doc-coauthoring
+description: 引导用户完成结构化的文档协作工作流程。当用户想要编写文档、提案、技术规范、决策文档或类似结构化内容时使用。此工作流程帮助用户高效地传递上下文、通过迭代优化内容，并验证文档对读者是否有效。当用户提到编写文档、创建提案、起草规范或类似文档任务时触发。
+---
+
+# 文档协作工作流程
+
+=== docx ===
+---
+name: docx
+description: "当用户需要创建、读取、编辑或操作Word文档（.docx文件）时使用本技能。触发场景包括：任何提及'Word doc'、'word document'、'.docx'的内容，或生成带目录、标题、页码、信头格式的专业文档的需求。也适用于从.docx文件提取或重组内容、在文档中插入或替换图片、在Word文件中执行查找替换、处理修订或评论、或将内容转换为精美Word文档的场景。如果用户要求生成Word或.docx格式的'报告'、'备忘录'、'信件'、'模板'或类似交付物，使用本技能。请勿用于PDF、电子表格、Google Docs或与文档生成无关的通用编码任务。"
+license: 专有。LICENSE.txt包含完整条款
+---
+
+
+=== frontend-design ===
+---
+name: frontend-design
+description: 创建独具特色、生产级别的高质量前端界面。当用户要求构建Web组件、页面或应用，且视觉效果与代码质量同等重要时使用。
+origin: ECC
+---
+
+
+=== internal-comms ===
+---
+name: internal-comms
+description: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
+license: Complete terms in LICENSE.txt
+---
+
+
+=== karpathy-guidelines ===
+---
+name: karpathy-guidelines
+description: Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
+license: MIT
+---
+
+
+=== latex-workshop-config ===
+---
+name: latex-workshop-config
+description: >
+  配置 VS Code LaTeX Workshop 扩展以正确编译中文 LaTeX 文档。只要用户提到 LaTeX 编译、
+  LaTeX Workshop 设置、.vscode/settings.json 配置、xelatex 编译失败、新建 LaTeX 项目、
+  迁移 LaTeX 项目、引用未定义、biber 报错、或中文 latex 排版，就使用这个技能。
+
+=== mcp-builder ===
+---
+name: mcp-builder
+description: 用于创建高质量 MCP（模型上下文协议）服务器的指南，使 LLM 能够通过精心设计的工具与外部服务交互。在构建 MCP 服务器以集成外部 API 或服务时使用，无论使用 Python（FastMCP）还是 Node/TypeScript（MCP SDK）。
+license: Complete terms in LICENSE.txt
+---
+
+
+=== nature-academic-search ===
+---
+name: nature-academic-search
+description: >-
+  Multi-source literature search, citation verification, MeSH search strategy,
+  citation file management (.nbib/.ris/.bib conversion), and reference management
+  (BibTeX, related articles, ID conversion) via MCP tools (PubMed, CrossRef, arXiv).
+
+=== nature-citation ===
+---
+name: nature-citation
+description: >-
+  Add strict Nature/CNS citations to manuscript text by splitting long passages into citable
+  segments, searching only accepted flagship and subjournal titles from Nature Portfolio, the
+  AAAS Science family, and Cell Press, filtering by publication time range, and exporting one
+
+=== nature-data ===
+---
+name: nature-data
+description: >-
+  Prepare, audit, or revise Nature-ready Data Availability statements, data repository plans,
+  dataset citations, and FAIR metadata checklists for manuscripts. Use when the user asks about
+  Nature data availability, research data sharing, repository selection, accession numbers,
+
+=== nature-figure ===
+---
+name: nature-figure
+description: >-
+  Submission-grade Nature/high-impact journal figure workflow for Python or R. Use whenever the user asks to create, revise, audit, or polish manuscript figures, multi-panel scientific plots, figures4papers-style matplotlib plots, or journal-ready SVG/PDF/TIFF outputs, especially for Nature-family or other high-impact journals. Before plotting, define the figure's conclusion, evidence logic, export needs, and review risks. If the user has not chosen Python or R, ask "Python or R?" and stop. Use only the selected backend for figure generation, previewing, exporting, and QA. Supports matplotlib/seaborn and ggplot2/patchwork/ComplexHeatmap. Not for dashboards or Illustrator/Figma-first infographics. Also trigger on general academic-writing figure needs even without the word "Nature", such as making figures/plots for a paper, scientific/academic plotting, data visualization for a manuscript, and Chinese phrasings like 论文配图、学术写作配图、科研绘图、科研作图、画图、作图、出图、论文图表、可视化.
+version: 2.0.0
+author: Community contribution, refactored into static/dynamic layers
+
+=== nature-paper2ppt ===
+---
+name: nature-paper2ppt
+description: Build a complete but efficient Nature-style Chinese PPTX presentation from a scientific paper, preprint, PDF, article text, abstract, figure legends, or reading notes. Use this skill whenever the user asks to make slides/PPT/PPTX for journal club, group meeting, paper sharing, thesis seminar, lab meeting, department report, or academic presentation from a research paper, not only medical papers. It identifies the paper type and argument, selects only the figures needed for the story, writes Chinese slide content and speaker notes, creates the actual .pptx deck, and runs an explicit self-review/corrective revision loop focused on figure quality, text overflow prevention, and non-template visual design before delivery. Also trigger on general academic-presentation requests even without the word "Nature", such as turning a paper into slides, building an academic talk deck, conference/defense presentations, and Chinese phrasings like 论文做PPT、论文汇报、组会PPT、文献汇报、学术汇报、做幻灯片、讲paper、读书报告PPT.
+version: 2.0.0
+author: Community contribution, refactored into static/dynamic layers
+---
+
+=== nature-polishing ===
+---
+name: nature-polishing
+description: Polish, restructure, or translate academic prose into Nature-leaning English using writing-strategy principles, curated Nature/Nature Communications article patterns, and phrase-level support from Academic Phrasebank. Use whenever the user asks to polish a manuscript paragraph, abstract, introduction, results, discussion, conclusion, title, methods section, or Chinese academic draft for publication-quality English. Also covers LaTeX layout/typesetting (排版) fixes — loose or sparse pages, stranded section headings, figures that don't fill the page or split across pages, "Float too large", multi-panel figure arrangement, and Supplementary Information that looks empty — via references/latex-layout.md. Also trigger on general academic/scientific writing requests even without the word "Nature", including academic writing, scientific writing, SCI/paper writing, English manuscript polishing, language editing, proofreading, and Chinese phrasings such as 学术写作、科研写作、论文润色、写paper、SCI写作、英文论文润色、语言润色、润色、改写、学术英语、英文写作.
+version: 6.1.0
+author: Yuan1z skill, refactored into static/dynamic layers
+---
+
+=== nature-reader ===
+---
+name: nature-reader
+description: Build full-paper Chinese-English side-by-side, figure/table-aware, source-grounded Markdown readers for journal or conference papers from PDF, DOI, arXiv, publisher HTML, or pasted text. Use whenever the user asks to translate or read a paper, make 中英文对照/原文对照/全文翻译解读, extract figures or tables into the right positions, preserve figure/table placement near relevant prose, or keep exact source anchors for every block. This skill must not degrade into a summary-only output unless the user explicitly asks for a summary. Also trigger on general paper-reading and translation requests even without the word "Nature", such as reading/translating an academic paper, literature reading, understanding a paper, and Chinese phrasings like 读论文、精读论文、论文翻译、文献翻译、文献阅读、学术阅读、帮我读这篇文章、翻译这篇paper.
+version: 2.0.0
+author: Community contribution, refactored into static/dynamic layers
+---
+
+=== nature-response ===
+---
+name: nature-response
+description: >-
+  Draft, audit, or revise point-by-point reviewer response letters for Nature-family
+  manuscript revisions. Use when the user provides reviewer comments, editor decision
+  letters, revision notes, response drafts, or asks how to respond to major/minor
+
+=== nature-reviewer ===
+---
+name: nature-reviewer
+description: >-
+  Simulate a Nature-style reviewer assessment from the referee perspective rather than
+  an author rebuttal. Use when the user wants a pre-submission review, reviewer report,
+  peer-review style critique, novelty/significance/technical soundness assessment,
+
+=== nature-writing ===
+---
+name: nature-writing
+description: Draft, restructure, or plan Nature-style manuscript sections from author-provided claims, results, figures, notes, or Chinese drafts. Use when the user wants to write or rebuild an abstract, introduction, related-work, method, experiments, discussion, conclusion, title, or full manuscript argument rather than only polish finished prose. Also trigger on general academic-writing requests even without the word "Nature", such as writing a paper from scratch, drafting a manuscript/section, structuring a paper, and Chinese phrasings like 学术写作、科研写作、论文写作、写论文、写paper、SCI写作、帮我写论文、搭论文框架、起草论文、写引言/摘要/讨论.
+version: 1.0.0
+author: Community contribution, refactored into static/dynamic layers
+---
+
+=== opencode ===
+---
+name: opencode
+description: 将编码任务委托给OpenCode CLI代理，用于功能实现、代码重构、PR审查和长时间自动会话。需要提前安装并认证OpenCode CLI。
+version: 1.2.0
+author: Hermes Agent
+license: MIT
+
+=== pdf ===
+---
+name: pdf
+description: 当用户想要对PDF文件进行任何操作时使用此技能。这包括读取或从PDF中提取文本/表格、将多个PDF合并为一个、拆分PDF、旋转页面、添加水印、创建新PDF、填写PDF表单、加密/解密PDF、提取图片，以及对扫描版PDF进行OCR使其可搜索。如果用户提到.pdf文件或要求生成一个，使用此技能。
+---
+
+# PDF处理指南
+
+=== pdf-converter ===
+---
+name: pdf-converter
+description: "PDF converter powered by MinerU — convert PDF to Word, Markdown, HTML, LaTeX, or plain text. Also handles image-to-text OCR, scanned document recognition, and Office formats (DOCX, PPTX, Excel). Supports 80+ languages. Use this skill when the user wants to convert, extract, read, parse, or summarize any PDF or document. Also applies when the user shares a PDF file or link and asks about its content, needs tables or formulas extracted, wants PDF OCR, or says things like 'turn this into a doc' or 'what does this paper say'."
+---
+
+# Document to Markdown
+
+=== playwright-cli ===
+---
+name: playwright-cli
+description: 自动化浏览器交互、测试网页以及处理Playwright测试用例
+allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*)
+---
+
+
+=== pptx ===
+---
+name: pptx
+description: "任何时候只要涉及.pptx文件——无论是作为输入、输出还是两者兼有——就使用此技能。这包括：创建幻灯片、推介文件或演示文稿；读取、解析或提取任何.pptx文件中的文本（即使提取的内容将用于其他地方，比如邮件或摘要）；编辑、修改或更新现有演示文稿；合并或拆分幻灯片文件；处理模板、布局、演讲者备注或注释。只要用户提到"deck"、"slides"、"presentation"或引用.pptx文件名，无论他们后续打算如何处理内容，都要触发此技能。如果需要打开、创建或处理.pptx文件，使用此技能。"
+---
+
+# PPTX 技能
+
+=== skill-creator ===
+---
+name: skill-creator
+description: 创建新技能、修改和改进现有技能，并衡量技能性能。当用户想要从头创建技能、编辑或优化现有技能、运行eval来测试技能、通过方差分析对技能性能进行基准测试，或优化技能描述以提高触发准确率时使用。
+---
+
+# 技能创建器
+
+=== slack-gif-creator ===
+---
+name: slack-gif-creator
+description: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack."
+license: Complete terms in LICENSE.txt
+---
+
+
+=== systematic-debugging ===
+---
+name: systematic-debugging
+description: 在提出修复方案前，遇到任何bug、测试失败或意外行为时使用
+---
+
+# 系统化调试
+
+=== template ===
+---
+name: template-skill
+description: Replace with description of the skill and when Claude should use it.
+---
+
+# Insert instructions below
+
+=== theme-factory ===
+---
+name: theme-factory
+description: 用于使用主题样式化各种工件的工具包。这些工件可以是幻灯片、文档、报告、HTML 着陆页等。有 10 个预设的颜色/字体主题，可以应用于任何已创建的工件，或者可以即时生成新主题。
+license: Complete terms in LICENSE.txt
+---
+
+
+=== web-artifacts-builder ===
+---
+name: web-artifacts-builder
+description: Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.
+license: Complete terms in LICENSE.txt
+---
+
+
+=== webapp-testing ===
+---
+name: webapp-testing
+description: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
+license: Complete terms in LICENSE.txt
+---
+
+
+=== xlsx ===
+---
+name: xlsx
+description: "当电子表格文件是主要输入或输出时使用此技能。适用于用户需要执行以下操作的任何任务：打开、读取、编辑或修复现有.xlsx、.xlsm、.csv或.tsv文件（例如添加列、计算公式、格式化、制作图表、清理杂乱数据）；从零开始或从其他数据源创建新电子表格；或在表格类文件格式之间转换。尤其当用户通过名称或路径引用电子表格文件时——即使是随意提及（比如"我下载文件夹里的xlsx"）——并且需要对其进行操作或基于其生成内容时触发。也适用于清理或重构杂乱的表格数据文件（格式错误的行、错位的表头、垃圾数据）为规范的电子表格。交付物必须是电子表格文件。当主要交付物是Word文档、HTML报告、独立Python脚本、数据库流水线或Google Sheets API集成时，即使涉及表格数据也不要触发此技能。"
+license: 专有。完整条款见LICENSE.txt
+---
+
+

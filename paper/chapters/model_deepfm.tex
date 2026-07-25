@@ -1,0 +1,163 @@
+% =============================================================================
+% DeepFM 原理深度讲解
+% =============================================================================
+
+\subsection{DeepFM：显式特征交互与因子分解机}
+
+DeepFM由Guo等人\cite{guo2017deepfm}于2017年提出，最初应用于点击率（CTR）预测。其核心思想是将因子分解机（Factorization Machine, FM）的显式二阶特征交互与深度神经网络的高阶表示学习融合于一个端到端框架中。与FT-Transformer的"隐式"交互（通过注意力权重间接建模）不同，DeepFM采用"显式"交互——直接计算每对特征的向量内积。
+
+\subsubsection{整体架构}
+
+DeepFM由三个组件构成，共享底层的特征嵌入层。图\ref{fig:deepfm_arch}展示了从前向传播到最终预测的完整数据流。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=0.5cm,
+    box/.style={rectangle, draw=black!70, rounded corners=3pt, minimum width=5.4cm, minimum height=0.6cm, align=center, font=\footnotesize},
+    branch/.style={rectangle, draw=black!50, rounded corners=2pt, minimum width=2.6cm, minimum height=0.58cm, align=center, font=\scriptsize},
+    arrow/.style={-{Stealth[scale=1.0]}, thick, black!60},
+    merge/.style={circle, draw=black!70, fill=black!5, minimum size=0.55cm, font=\small},
+]
+    % Main flow
+    \node[box, fill=blue!5] (input) {输入 $\mathbf{x} = [x_1, \dots, x_{29}] \in \mathbb{R}^{29}$};
+    \node[box, fill=green!8, below=of input] (embed) {共享嵌入: $\mathbf{e}_i = x_i \cdot \mathbf{v}_i \in \mathbb{R}^{16}$ ($i = 1,\dots,29$)};
+    \node[box, fill=orange!5, below=0.15cm of embed] (split) {分两路：FM路径 + Deep路径（共享嵌入参数）};
+
+    % FM branch
+    \node[branch, fill=yellow!8, below left=0.6cm and -1.6cm of split] (linear) {一阶线性: $\sum_{i} w_i x_i$};
+    \node[branch, fill=yellow!8, below=0.3cm of linear] (second) {二阶交互: $\sum_{i<j}\langle\mathbf{v}_i,\mathbf{v}_j\rangle x_i x_j$};
+
+    % Deep branch
+    \node[branch, fill=cyan!8, below right=0.6cm and -1.6cm of split] (dense1) {Dense(464$\to$256) + ReLU};
+    \node[branch, fill=cyan!8, below=0.3cm of dense1] (dense2) {Dense(256$\to$128) + ReLU};
+    \node[branch, fill=cyan!8, below=0.3cm of dense2] (dense3) {Dense(128$\to$64) + ReLU};
+
+    % Merge
+    \node[merge, below=2.0cm of split] (merge) {$\Sigma$};
+    \node[box, fill=red!5, below=0.35cm of merge] (sigmoid) {$\sigma\!\left(w_0 + \text{FM} + \text{Deep}\right)$};
+    \node[box, fill=red!8, below=0.35cm of sigmoid] (output) {输出: $\hat{y} \in [0, 1]$};
+
+    % Arrows from input
+    \draw[arrow] (input) -- (embed);
+    \draw[arrow] (embed) -- (split);
+
+    % FM branch arrows
+    \draw[arrow] (split.south) -- ++(0, -0.25) -| (linear.north);
+    \draw[arrow] (linear) -- (second);
+    \draw[arrow] (second.south) -- ++(0, -0.2) -| (merge.west);
+
+    % Deep branch arrows
+    \draw[arrow] (split.south) -- ++(0, -0.25) -| (dense1.north);
+    \draw[arrow] (dense1) -- (dense2);
+    \draw[arrow] (dense2) -- (dense3);
+    \draw[arrow] (dense3.south) -- ++(0, -0.2) -| (merge.east);
+
+    % Merge to output
+    \draw[arrow] (merge) -- (sigmoid);
+    \draw[arrow] (sigmoid) -- (output);
+
+    % Annotation
+    \node[font=\scriptsize\itshape, black!45, right=1.0cm of second] {FM: $O(DK)$};
+    \node[font=\scriptsize\itshape, black!45, right=1.0cm of dense3] {Deep: MLP};
+\end{tikzpicture}
+\caption{DeepFM架构流程图。29个数值特征经共享嵌入层映射为16维向量，分两路并行计算：FM路径执行显式一阶和二阶特征交互，Deep路径通过三层MLP学习高阶表示。两路输出与全局偏置$w_0$求和后经Sigmoid输出。共享嵌入是DeepFM的核心设计——FM的交互质量直接影响Deep路径的初始表示。}
+\label{fig:deepfm_arch}
+\end{figure}
+
+\subsubsection{第一层：共享嵌入}
+
+每个特征$x_i$（标量）被映射为一个$K$维嵌入向量（本文$K=16$）：
+
+\begin{equation}
+\mathbf{e}_i = x_i \cdot \mathbf{v}_i \in \mathbb{R}^{K}
+\label{eq:deepfm_embed}
+\end{equation}
+
+其中$\mathbf{v}_i \in \mathbb{R}^{K}$是特征$i$的专属嵌入向量。所有这些$\mathbf{v}_i$在FM组件和Deep组件之间\textbf{共享}——这意味着FM学习到的成对关系会通过反向传播同时优化Deep路径使用的嵌入表示。共享机制是DeepFM超越"FM+MLP串联"的关键：两个组件的训练信号在嵌入层交汇，FM提供的结构化交互信号充当Deep路径的正则化先验。
+
+\subsubsection{第二层：FM组件}
+
+FM组件由两部分组成：
+
+\textbf{一阶部分（线性）：}
+\begin{equation}
+y_{\mathrm{linear}} = w_0 + \sum_{i=1}^{D} w_i x_i
+\end{equation}
+
+这部分等价于逻辑回归——每个特征有独立的线性权重$w_i$，直接对预测值做加减。$w_0$是全局偏置。
+
+\textbf{二阶部分（成对交互）：}
+\begin{equation}
+y_{\mathrm{FM}} = \sum_{i=1}^{D} \sum_{j=i+1}^{D} \langle \mathbf{v}_i, \mathbf{v}_j \rangle \cdot x_i x_j
+\label{eq:fm_interaction}
+\end{equation}
+
+这是FM的核心。对每一对特征$(i, j)$，其交互强度由两个因素共同决定：
+\begin{enumerate}
+    \item \textbf{数值乘积} $x_i \cdot x_j$：如果两个特征同时偏高（如V14和V12均异常高），乘积大→交互贡献大。
+    \item \textbf{嵌入相似度} $\langle \mathbf{v}_i, \mathbf{v}_j \rangle$：两个特征的嵌入向量越"对齐"（内积越大），它们对预测的协同效应越强。
+\end{enumerate}
+
+\textbf{关键数学技巧——$O(D^2K) \to O(DK)$：}直接计算公式\eqref{eq:fm_interaction}需要对$D(D-1)/2$对特征各计算一次$K$维内积，复杂度$O(D^2K)$。通过以下代数变换可降至$O(DK)$：
+
+\begin{equation}
+\begin{aligned}
+\sum_{i=1}^{D}\sum_{j=i+1}^{D} \langle \mathbf{v}_i, \mathbf{v}_j \rangle x_i x_j
+&= \frac{1}{2}\left(\sum_{i=1}^{D}\sum_{j=1}^{D} \langle \mathbf{v}_i, \mathbf{v}_j \rangle x_i x_j - \sum_{i=1}^{D} \langle \mathbf{v}_i, \mathbf{v}_i \rangle x_i^2 \right) \\
+&= \frac{1}{2}\left( \sum_{f=1}^{K}\left(\sum_{i=1}^{D} v_{i,f} x_i\right)^2 - \sum_{i=1}^{D}\sum_{f=1}^{K} v_{i,f}^2 x_i^2 \right)
+\end{aligned}
+\label{eq:fm_trick}
+\end{equation}
+
+式\eqref{eq:fm_trick}的关键在于将双重求和$\sum_i\sum_j$转化为先对$i$求和再平方的结构——这只需要$O(DK)$次乘法和加法，而非$O(D^2K)$次。当$D=29$时，$O(DK)=464$次操作 vs. $O(D^2K)=13,456$次操作，加速约29倍。这一变换使得FM的大规模特征交互在计算上可行。
+
+\subsubsection{第三层：Deep组件}
+
+Deep组件是一个标准的前馈神经网络，接收所有特征嵌入向量的拼接（flatten）作为输入：
+
+\begin{equation}
+\mathbf{h}_0 = \mathrm{Concat}(\mathbf{e}_1, \mathbf{e}_2, \dots, \mathbf{e}_{29}) \in \mathbb{R}^{D \times K = 464}
+\end{equation}
+
+随后通过三层全连接网络：
+
+\begin{equation}
+\begin{aligned}
+\mathbf{h}_1 &= \mathrm{ReLU}(\mathbf{W}_1 \mathbf{h}_0 + \mathbf{b}_1), \quad \mathbf{W}_1 \in \mathbb{R}^{256 \times 464} \\
+\mathbf{h}_2 &= \mathrm{ReLU}(\mathbf{W}_2 \mathbf{h}_1 + \mathbf{b}_2), \quad \mathbf{W}_2 \in \mathbb{R}^{128 \times 256} \\
+\mathbf{h}_3 &= \mathrm{ReLU}(\mathbf{W}_3 \mathbf{h}_2 + \mathbf{b}_3), \quad \mathbf{W}_3 \in \mathbb{R}^{64 \times 128}
+\end{aligned}
+\end{equation}
+
+每层后应用Dropout（$p=0.3$）防止过拟合。Deep组件可以学习任意阶的特征交互——例如，V14$\times$V12$\times$V4的三阶交互可以通过两层ReLU的非线性组合隐式建模。
+
+\subsubsection{第四层：最终融合}
+
+三路输出求和后经Sigmoid得到最终预测：
+
+\begin{equation}
+\hat{y} = \sigma\Big(w_0 + \underbrace{\sum_{i=1}^{29} w_i x_i}_{\text{一阶线性}} + \underbrace{\frac{1}{2}\sum_{f=1}^{16}\Big[\big(\sum_i v_{i,f}x_i\big)^2 - \sum_i v_{i,f}^2 x_i^2\Big]}_{\text{FM二阶交互}} + \underbrace{\mathbf{W}_{\mathrm{out}} \cdot \mathbf{h}_3}_{\text{Deep高阶}} \Big)
+\end{equation}
+
+为什么使用"求和"而非"拼接"融合？FM和Deep组件共享嵌入层，它们的输出已经位于相关的语义空间。求和是一种参数无关的融合方式，允许模型通过反向传播自动分配两个组件的相对贡献——如果FM的二阶交互足够，Deep输出趋近于零；如果高阶模式更关键，Deep输出主导预测。
+
+\subsubsection{DeepFM在PCA空间中的优势}
+
+本文的关键实验发现——DeepFM（AUPRC=0.9336）优于FT-Transformer（0.9179）——可从架构设计中得到解释：
+
+\begin{enumerate}
+    \item \textbf{不依赖特征"身份"的全局比较}：FT-Transformer的注意力通过Query-Key内积评估"特征$i$对特征$j$有多重要"，这要求特征嵌入空间具有可区分的几何结构。PCA匿名化抹去了特征的原始语义，使各嵌入向量在空间中高度同质化，内积趋同→注意力均匀。DeepFM的$\langle \mathbf{v}_i, \mathbf{v}_j \rangle$内积只是两个嵌入向量的"对齐程度"的静态度量，不依赖Query-Key的动态上下文——它在训练前就确定了"V14和V12的交互值得关注"。
+    \item \textbf{交互的直接性}：FM的二阶交互是$x_i \cdot x_j \cdot \langle \mathbf{v}_i, \mathbf{v}_j \rangle$的简单三因子乘积，梯度路径短且稳定。FT-Transformer的交互需要经过Softmax/Sparsemax归一化+Value加权求和+残差连接，梯度需要穿越多个非线性层。
+    \item \textbf{知识蒸馏的兼容性}：XGBoost的分裂决策本质上是轴对齐的——每次分裂沿单一特征维度判断$x_i > t$。DeepFM的一阶线性项$w_i x_i$直接对应这种轴对齐模式，软标签蒸馏的信号得以无损注入。而FT-Transformer的注意力无视特征轴，蒸馏信号在注意力矩阵中经过非线性变换后被稀释。
+\end{enumerate}
+
+\subsubsection{本文配置与训练细节}
+
+\begin{itemize}
+    \item $K=16$（嵌入维度），Deep layers=[256, 128, 64]，Dropout=0.3
+    \item 总参数量：161,648（略高于FT-Transformer的153,921）
+    \item 优化器：AdamW（lr=$10^{-3}$, weight\_decay=$10^{-4}$）
+    \item 损失函数：Focal Loss（$\alpha=0.995$即类别反比, $\gamma=2.0$）——DeepFM使用强类别加权以弥补其缺乏内置稀疏注意力（Sparsemax）的劣势
+    \item 蒸馏配置（DeepFM+KD）：$T=4.0, \alpha_{\mathrm{KD}}=0.7$——软标签权重占30\%，Focal Loss占70\%
+\end{itemize}

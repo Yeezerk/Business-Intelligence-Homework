@@ -1,0 +1,73 @@
+% =============================================================================
+% 商业智能大作业：PCA匿名化特征空间中的自注意力塌缩——诊断与修复
+% 编译器: XeLaTeX  |  文档类: ctexart
+% =============================================================================
+
+\documentclass[UTF8,a4paper,12pt,fontset=fandol]{ctexart}
+
+% ── Packages ──────────────────────────────────────────────────────────
+\usepackage{geometry}
+\geometry{left=2.0cm,right=2.0cm,top=2.0cm,bottom=2.0cm}
+
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes,fit,backgrounds,calc}
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{setspace}
+\setstretch{0.98}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{3pt}
+\setlength{\intextsep}{5pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{5pt plus 2pt minus 2pt}
+
+% Tighten list spacing globally
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=*}
+
+% Float page optimization
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{12pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+
+% ── References ────────────────────────────────────────────────────────
+\usepackage[backend=biber,style=ieee,sorting=none]{biblatex}
+\addbibresource{references.bib}
+
+% ── Metadata ──────────────────────────────────────────────────────────
+\title{\heiti\zihao{2} 金融隐私数据环境下的自注意力塌缩\\[0.3em]
+       \large ——以信用卡欺诈检测为例的诊断、修复与机制分析}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\input{chapters/abstract}        % Ch0：中英双语摘要
+\input{chapters/introduction}    % Ch1：引言——核心问题与贡献
+\input{chapters/data}            % Ch2：数据来源与探索性分析
+\input{chapters/background}      % Ch3：FT-Transformer架构与塌缩形式化定义
+\input{chapters/setup}           % Ch4：实验设置（Focal Loss+模型配置+训练+评估）
+\input{chapters/results}         % Ch5：实验结果——塌缩的实证呈现与Sparsemax修复
+\input{chapters/diagnosis}       % Ch6：诊断——塌缩的深层机制（嵌入SVD+症状vs病因+LOR-MIM边界）
+\input{chapters/conclusion}      % Ch7：结论
+
+\printbibliography
+
+\end{document}

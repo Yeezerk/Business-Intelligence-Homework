@@ -1,0 +1,73 @@
+% =============================================================================
+% 第4章：实验设置
+% =============================================================================
+
+\section{实验设置}
+\label{sec:setup}
+
+本章描述实验的技术配置。数据来源、EDA和预处理流程见第\ref{sec:data}节。
+
+\subsection{损失函数选择：Focal Loss的必要性}
+
+数据集欺诈率仅0.5\%（正负比约1:200），标准的二元交叉熵（BCE）在此极度不平衡条件下存在严重缺陷：正常交易样本占总样本的99.5\%，BCE的梯度将被多数类主导，模型在训练早期就会收敛到"预测所有样本为正常"的退化解。
+
+Focal Loss\cite{lin2017focal}通过两个机制解决这一问题：
+
+\begin{equation}
+\text{FL}(p_t) = -\alpha_t (1 - p_t)^{\gamma} \log(p_t)
+\label{eq:focal}
+\end{equation}
+
+其中$p_t = p$当$y=1$否则$p_t = 1-p$，$\alpha_t = \alpha$当$y=1$否则$\alpha_t = 1-\alpha$。
+
+\begin{itemize}
+    \item \textbf{聚焦参数$\gamma=2.0$}：降低易分类样本的损失权重，使训练集中于难分类样本。
+    \item \textbf{平衡参数$\alpha=0.25$}：调节正负类权重。本文选择$\alpha=0.25$，因为Sparsemax已通过稀疏特征选择内置了一定的抗不平衡能力。
+\end{itemize}
+
+
+\subsection{模型配置}
+
+本文通过四个控制变量实验构建诊断链，所有变体的架构基础完全一致（表\ref{tab:variant_config}）：
+
+\begin{table}[H]
+\centering
+\caption{四个实验变体及控制变量。所有变体共享相同的FT-Transformer架构（手写实现，ReGLU，203,841参数），损失函数统一为Focal Loss，LOR-MIM变体额外增加305参数（0.15\%）。}
+\label{tab:variant_config}
+\begin{tabular}{lccc}
+\toprule
+\textbf{变体} & \textbf{注意力归一化} & \textbf{数据预处理} \\
+\midrule
+Softmax基线         & Softmax   & 无 \\
+Sparsemax           & Sparsemax & 无 \\
+LOR-MIM + Softmax   & Softmax   & LOR-MIM混合 \\
+LOR-MIM + Sparsemax & Sparsemax & LOR-MIM混合 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+共享的架构配置：$d_{model}=64$, $n_{heads}=8$, $n_{layers}=3$, $d_{ffn}=256$，总参数量203,841。
+
+\subsection{LOR-MIM配置}
+
+LOR-MIM的具体原理见第\ref{sec:background}节。其关键超参配置如下：
+\begin{itemize}
+    \item \textbf{分组数$K=5$}：基于V特征与Amount的互信息经谱聚类将28个V特征分为5组（分组结果：[9, 8, 5, 3, 3]）。
+    \item \textbf{门控MLP}：单隐藏层（1$\to$16$\to$5，ReLU激活，Softmax归一化），以标准化的Amount为唯一输入。
+    \item \textbf{混合矩阵}：每组一个$d_k \times d_k$矩阵$M_k$，初始化为$I + \mathcal{N}(0, 0.05)$（近单位阵+小高斯噪声）。
+    \item \textbf{参数量}：305个额外参数（门控MLP 293 + 混合矩阵12组），占FT-Transformer总参数的0.15\%。
+\end{itemize}
+
+\subsection{训练策略}
+
+所有变体使用完全一致的训练配置：AdamW优化器（$lr{=}1{\times}10^{-3}$, weight\_decay$\,{=}\,10^{-5}$, $\beta_1{=}0.9$, $\beta_2{=}0.999$），批量大小512，最大训练轮数100，早停patience=15（基于验证集AUPRC），梯度裁剪max\_norm=1.0，ReduceLROnPlateau学习率调度（patience=8, factor=0.5）。每个模型训练前显式重置random、numpy、torch和cuda的全部随机状态（统一seed=42）以确保可复现性。所有实验在NVIDIA GeForce RTX 4060（8GB）GPU和PyTorch 2.11.0+cu128环境下完成。
+
+\subsection{评估指标}
+
+\begin{itemize}
+    \item \textbf{AUPRC}（主要指标）：聚焦正类（欺诈）的排序能力。在不平衡数据上，ROC-AUC的区分度远低于AUPRC\cite{saito2015precision}。
+    \item \textbf{AttnStd}（注意力权重标准差）：塌缩程度的直接度量。均匀基线$1/29\approx 0.0345$。
+    \item \textbf{ECE}（Expected Calibration Error）：概率校准质量。将预测概率等分为10个分位区间，计算各区间内平均预测概率与平均真实正类率之差的加权平均。ECE越低表示模型的概率估计越可信——这对风控业务至关重要：过度自信的模型会产生误导性高风险预警。
+    \item \textbf{F1-Score}、\textbf{Precision}、\textbf{Recall}：在验证集F1最大化的最优阈值处计算。
+    \item \textbf{Cost}：业务成本 $= FP \times 1 + FN \times 10$（漏报权重10倍于误报）。
+\end{itemize}

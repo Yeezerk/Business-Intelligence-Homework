@@ -1,0 +1,10 @@
+import pandas as pd
+df = pd.read_csv('outputs/raw/credit_card_fraud.csv', nrows=3)
+print('Columns:')
+print(list(df.columns))
+print()
+print('Shape sample:', df.shape)
+print()
+print('First row V1-V5:', [df.iloc[0][c] for c in df.columns if c.startswith('V')][:5])
+print('First row Amount:', df.iloc[0].get('Amount', 'N/A'))
+print('First row Class:', df.iloc[0].get('Class', 'N/A'))

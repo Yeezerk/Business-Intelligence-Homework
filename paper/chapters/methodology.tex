@@ -1,0 +1,145 @@
+% 方法论章节
+
+\section{方法论}
+
+\subsection{符号定义}
+
+为保持全文符号一致性，本文采用以下统一符号体系：
+
+\begin{table}[H]
+\centering
+\caption{全文统一符号定义。包含数据集、特征向量、类别标签、模型预测函数、分类阈值、混淆矩阵元素和业务成本等核心符号。}
+\label{tab:notation}
+\begin{tabular}{cl}
+\toprule
+\textbf{符号} & \textbf{含义} \\
+\midrule
+$\mathcal{D}$ & 完整数据集 $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i=1}^{N}$ \\
+$\mathbf{x}_i \in \mathbb{R}^d$ & 第$i$个样本的特征向量（$d=29$） \\
+$y_i \in \{0, 1\}$ & 类别标签（$0$=正常交易，$1$=欺诈交易） \\
+$\mathcal{D}_{\text{train}}, \mathcal{D}_{\text{val}}, \mathcal{D}_{\text{test}}$ & 训练集、验证集、测试集 \\
+$N$ & 样本总数 \\
+$d$ & 特征维度 \\
+$f(\cdot)$ & 模型预测函数，$f: \mathbb{R}^d \to [0, 1]$ \\
+$\hat{y}_i = f(\mathbf{x}_i)$ & 模型对样本$i$的预测概率 \\
+$\tau$ & 分类阈值，$\hat{y}_i \geq \tau$ 判定为欺诈 \\
+TP, FP, FN, TN & 真正例、假正例、假负例、真负例 \\
+$\text{Cost}$ & 业务成本，$\text{Cost} = C_{FP} \cdot \text{FP} + C_{FN} \cdot \text{FN}$ \\
+$C_{FP}, C_{FN}$ & 误报成本、漏报成本（$C_{FP}=1, C_{FN}=10$） \\
+$\phi_j$ & 特征$j$的Shapley值 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{数据来源与探索性分析}
+
+本文采用Kaggle平台上的Credit Card Fraud Detection Dataset 2023数据集\cite{kaggle2023fraud}。该数据集包含信用卡交易记录，原始数据超过56.8万条，且正负类接近1:1平衡。然而，真实信用卡欺诈的比率通常仅为0.1\%--1\%，为模拟这一现实场景，本文对多数类（正常交易）进行下采样并限制最大样本数为150,000，同时从少数类（欺诈交易）中随机抽取750条，使最终欺诈比例约为0.5\%（正负比约1:200）。数据已通过PCA进行部分匿名化处理，但其规模（处理后150,750条记录）为深度学习模型提供了充足的训练样本。
+
+\subsubsection{数据集特征}
+
+数据集共包含31个特征列：28个匿名化PCA特征（V1-V28）、交易金额（Amount）和类别标签（Class，0=正常，1=欺诈）。初步探索性分析显示：
+
+\begin{itemize}
+    \item 总交易数：150,750（150,000正常 + 750欺诈）
+    \item 欺诈交易占比：0.5\%（严重不平衡，正负比约1:200）
+    \item 无缺失值，所有特征均为数值型
+    \item Amount特征呈现典型的长尾分布
+    \item 部分V特征在欺诈和正常交易间呈现显著分布差异
+\end{itemize}
+
+图\ref{fig:class_balance}呈现了经不平衡处理后的完整数据集类别分布：正常交易样本数为150,000，欺诈交易样本数仅为750，正负类比例约为200:1。这种极端的类别不平衡是信用卡欺诈检测任务的核心挑战——模型在训练过程中极易被多数类主导，导致对少数类的识别能力严重退化。仅0.5\%的欺诈比例意味着，即使一个"将所有交易预测为正常"的朴素分类器也能达到99.5\%的准确率——这正是准确率（Accuracy）在不平衡场景下完全失效的原因，也解释了本文为何采用AUPRC而非准确率作为主要评估指标。
+
+图\ref{fig:amount_dist}以核密度估计对比了两类交易的金额分布。蓝色曲线（正常交易，$n=150,000$）和橙色曲线（欺诈交易，$n=750$）均呈现明显的右偏（长尾）分布，但存在两个关键差异：第一，欺诈交易的KDE峰值位置略高于正常交易，表明欺诈者倾向于选择中等偏高的交易金额以在"隐匿性"与"收益"之间取得平衡；第二，在高金额区间（$>15,000$标准化单位），欺诈交易的密度相对更高，这与银行业务经验一致——高价值交易是欺诈者的优先目标。然而，两类分布在整体上存在大量重叠区域，意味着仅凭交易金额远不足以区分欺诈与正常交易，必须依赖多维特征联合判别。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{class_balance.pdf}
+    \caption{经不平衡处理后的数据集类别分布。正常交易150,000条，欺诈交易750条，正负比约200:1，准确率在此场景下完全失效。}
+    \label{fig:class_balance}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.78\textwidth]{amount_distribution.pdf}
+    \caption{正常交易与欺诈交易的金额核密度估计曲线。蓝色为正常交易，橙色为欺诈交易，两类均呈右偏分布且存在大量重叠，欺诈交易在高金额区间密度略高。}
+    \label{fig:amount_dist}
+\end{figure}
+
+上述EDA结果表明，任何有效的欺诈检测模型必须：（1）采用针对性的不平衡处理策略（如Focal Loss、SMOTE或类别加权），因为0.5\%的欺诈率使标准分类器失效；（2）依赖多特征联合判别而非单一金额阈值，因为两类金额分布存在大量重叠；（3）在评估时优先使用对类别不平衡敏感的指标（如AUPRC而非ROC-AUC或准确率）。
+
+\subsection{数据预处理}
+
+数据预处理流水线包含以下步骤：
+
+\begin{enumerate}
+    \item \textbf{特征选择}：移除ID列（不携带预测信息）。
+    \item \textbf{异常值处理}：对Amount特征采用IQR方法进行异常值截断（仅在训练集上计算上下界，避免数据泄露）。V1-V28为PCA变换后的特征，其分布为原始特征的线性组合，不具有传统意义上的"异常值"含义，因此不做截断处理。
+    \item \textbf{标准化}：使用StandardScaler对所有数值特征进行标准化（拟合于训练集，应用于验证集和测试集）。
+    \item \textbf{数据集划分}：按70\%/15\%/15\%进行分层划分（Stratified Split），确保各个子集中欺诈比例一致。
+\end{enumerate}
+
+\subsection{模型架构}
+
+本文实现并比较了两种异构深度神经网络架构与XGBoost传统基线。在此基础上，引入Tree-Supervised知识蒸馏方案（第三节），将XGBoost的树归纳偏置迁移至FT-Transformer：
+
+\subsubsection{XGBoost基线}
+
+XGBoost（eXtreme Gradient Boosting）\cite{chen2016xgboost}作为传统表格数据的强基线，采用梯度提升树框架。本文使用300轮提升、最大深度8、学习率0.05，并通过scale\_pos\_weight参数根据训练集正负比自动调节类别权重。为充分利用数据，XGBoost在训练集和验证集的合并数据上训练。
+
+\input{chapters/model_ftt}
+\input{chapters/model_deepfm}
+
+\subsection{训练策略}
+
+\subsubsection{Focal Loss}
+
+本文采用Focal Loss作为主要损失函数\cite{lin2017focal}：
+
+\begin{equation}
+\text{FL}(p_t) = -\alpha_t (1 - p_t)^\gamma \log(p_t)
+\end{equation}
+
+其中 $p_t = p$ 当 $y=1$ 否则 $p_t = 1-p$，$\alpha_t = \alpha$ 当 $y=1$ 否则 $\alpha_t = 1-\alpha$。
+
+两个关键超参数：
+\begin{itemize}
+    \item $\gamma$（聚焦参数）：控制对易分类样本的"惩罚"力度。$\gamma=0$退化为标准交叉熵，$\gamma$越大，模型越关注难分类样本。
+    \item $\alpha$（平衡参数）：调节正负类之间的权重。对于FT-Transformer，因其Sparsemax注意力需要更均衡的梯度信号，使用默认值$\alpha=0.25$；对于DeepFM，设$\alpha = 1 - \text{正类比例}$，使少数类获得更高的损失权重。
+\end{itemize}
+
+本文将Focal Loss作为主要损失函数用于所有深度模型训练。
+
+\subsubsection{优化设置}
+
+所有神经网络模型使用AdamW优化器（$\beta_1=0.9, \beta_2=0.999$），配合ReduceLROnPlateau学习率调度（当验证集AUPRC连续8轮无提升时，学习率减半）。训练采用以下策略：
+\begin{itemize}
+    \item 批量大小：512
+    \item 最大训练轮数：100
+    \item 早停策略：验证集AUPRC连续15轮无提升时停止
+    \item 梯度裁剪：max\_norm=1.0
+    \item 最佳模型保存：基于验证集AUPRC
+\end{itemize}
+
+\subsection{评估指标}
+
+\subsubsection{主要指标：AUPRC}
+
+鉴于类别高度不平衡，AUPRC（Area Under Precision-Recall Curve）是比ROC-AUC更合适的评估指标\cite{saito2015precision}。ROC-AUC在不平衡数据上可能给出过于乐观的评估，因为真负类（True Negative）占主导地位。PR曲线聚焦于正类（欺诈）的预测质量，对样本分布变化更为敏感。
+
+\subsubsection{次要指标}
+
+\begin{itemize}
+    \item ROC-AUC：便于与文献中的现有工作对比
+    \item F1-Score：在最佳阈值（基于验证集F1最大化）处计算
+    \item Precision \& Recall：分别衡量误报率和漏报率
+\end{itemize}
+
+\subsubsection{商业成本指标}
+
+从银行业务角度出发，误报（将正常交易标记为欺诈）和漏报（未检出欺诈交易）的成本截然不同：
+
+\begin{equation}
+\text{Cost} = FP \times C_{FP} + FN \times C_{FN}, \quad C_{FP}=1, C_{FN}=10
+\end{equation}
+
+漏报（$FN$）的真实成本大约是误报（$FP$）的10倍——未发现的欺诈交易导致直接资金损失，而误报仅需额外的人工审核。

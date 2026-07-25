@@ -1,0 +1,18 @@
+% 中文摘要
+\begin{abstract}
+\noindent
+在金融反欺诈的行业实践中，数据隐私法规（如《个人信息保护法》、GDPR）要求跨机构共享的客户数据必须经过匿名化处理，PCA匿名化正是最常见的脱敏手段之一。然而，当深度学习模型（以Transformer为代表）被应用于此类丧失了语义身份的特征数据时，其赖以工作的自注意力机制可能发生系统性塌缩——所有特征被等权对待，模型的决策过程丧失了可区分性和可解释性。本文以信用卡欺诈检测为具体场景，在Kaggle 2023数据集（29维PCA匿名化特征，0.5\%欺诈率）上通过五个FT-Transformer变体的受控实验，对这一问题进行了系统诊断。核心发现：（1）PCA匿名化特征空间中，Softmax自注意力塌缩为均匀分布（标准差仅为均匀基线的3.6\%），根因是特征嵌入的方向同构性，Focal Loss进一步将塌缩放大了$\times$3.3；（2）三种修复路径各有边界，且\textbf{没有任何模型在所有指标上全面占优}——归一化端Sparsemax恢复多样性$\times$7.5（AUPRC 0.9384，Cost最优）、损失端BCE AUPRC和校准均最优（0.9491, ECE=0.0001）、数据端LOR-MIM恢复多样性最显著（$\times$11.2, F1最优）；（3）LOR-MIM与Sparsemax联合使用揭示数据端与归一化端修复之间存在结构性拮抗——注意力多样性进一步提升（$\times$16.5），但AUPRC反而下降（0.9267）。本文的实践意义在于：为金融机构在匿名化数据上应用深度学习时面临的"模型是否可信"问题，提供了一套可操作的诊断流程和基于特征匿名化程度的模型选型参考。
+
+\vspace{1em}
+\noindent\textbf{关键词：}自注意力塌缩；PCA匿名化；金融隐私数据；FT-Transformer；Sparsemax；LOR-MIM
+\end{abstract}
+
+% English Abstract
+\begin{center}
+{\Large\textbf{Abstract}}
+\end{center}
+\noindent
+Cross-institutional anti-fraud collaboration requires customer data to be anonymized under privacy regulations such as GDPR, with PCA-based anonymization being a widely adopted technique. However, when deep learning models---particularly Transformers---are applied to such privacy-preserving features, the self-attention mechanism may undergo systematic collapse: all features receive near-uniform weights, rendering model decisions both uninterpretable and potentially unreliable. Using credit card fraud detection on the Kaggle 2023 dataset (29 PCA-anonymized features, 0.5\% fraud rate), we conduct controlled experiments across five FT-Transformer variants. Key findings are threefold. First, Softmax attention collapses to a quasi-uniform distribution (standard deviation only 3.6\% of the uniform baseline), with PCA-induced embedding homogeneity as the root cause and Focal Loss amplifying collapse by $\times$3.3. Second, three repair paths show distinct boundaries with \textbf{no single model dominating all metrics}: Sparsemax restores diversity $\times$7.5 (AUPRC 0.9384, best Cost), BCE achieves best AUPRC and near-perfect calibration (0.9491, ECE=0.0001), and LOR-MIM yields strongest diversity ($\times$11.2, best F1). Third, combining LOR-MIM with Sparsemax reveals structural antagonism between repair paths---diversity reaches $\times$16.5, yet AUPRC drops below Sparsemax alone (0.9267 vs.\ 0.9384). We contribute a diagnostic framework for attention collapse under feature anonymization, together with practical model-selection guidance for financial institutions deploying deep learning on privacy-protected data.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} attention collapse; PCA anonymization; financial privacy data; FT-Transformer; Sparsemax; LOR-MIM

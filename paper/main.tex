@@ -1,0 +1,69 @@
+% =============================================================================
+% 商业智能大作业：基于深度神经网络的信用卡欺诈检测研究
+% 编译器: XeLaTeX  |  文档类: ctexart
+% =============================================================================
+
+\documentclass[UTF8,a4paper,12pt,fontset=fandol]{ctexart}
+
+% ── Packages ──────────────────────────────────────────────────────────
+\usepackage{geometry}
+\geometry{left=2.0cm,right=2.0cm,top=2.0cm,bottom=2.0cm}
+
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes,fit,backgrounds,calc}
+\usepackage{algorithm2e}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{setspace}
+\setstretch{1.05}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{3pt}
+\setlength{\intextsep}{5pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{5pt plus 2pt minus 2pt}
+
+% Float page optimization — top-align so slack collects at bottom
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{12pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+
+% ── References ────────────────────────────────────────────────────────
+\usepackage[backend=biber,style=ieee,sorting=none]{biblatex}
+\addbibresource{references.bib}
+
+% ── Metadata ──────────────────────────────────────────────────────────
+\title{\heiti\zihao{2} 深度神经网络在信用卡欺诈检测中的应用研究 \\
+       \large ——基于树归纳偏置迁移的深度表格模型研究}
+% \author{学生姓名 \\ 学号: XXXXXXXX}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\input{chapters/abstract}
+\input{chapters/introduction}
+\input{chapters/related_work}
+\input{chapters/methodology}
+\input{chapters/experiments}
+\input{chapters/analysis}
+\input{chapters/discussion}
+\input{chapters/conclusion}
+
+\printbibliography
+
+\end{document}

@@ -1,0 +1,18 @@
+% 中文摘要
+\begin{abstract}
+\noindent
+信用卡欺诈检测是金融风控领域最具挑战性的问题之一，其类别高度不平衡的特性对机器学习方法提出了严峻考验。本文基于Kaggle 2023年信用卡欺诈检测数据集（56.8万条交易记录，经类别不平衡处理后使用约15万条样本），比较了两种异构深度神经网络架构（FT-Transformer、DeepFM）与XGBoost传统基线在欺诈检测任务上的表现，并提出了一种基于树归纳偏置迁移的知识蒸馏优化方案——将XGBoost的轴对齐分裂先验通过软标签蒸馏和特征重要性正则化迁移至深度模型。实验结果表明，DeepFM（AUPRC=0.9336）达到与XGBoost（0.9331）统计上不可区分的性能水平；FT-Transformer经Sparsemax替代Softmax后AUPRC达0.9179，且获得最低业务成本（Cost=99）。Tree-Supervised蒸馏消融实验揭示了一个关键的因果区分：软标签蒸馏（3A）在本研究条件下对两种架构均产生正向增益——FTT+KD达AUPRC=0.9347（+1.68pp）、DeepFM+KD达0.9495（+1.59pp），两者校准均近乎完美（ECE$<$0.001）；然而，特征重要性正则化（TreeReg, 3B）将FTT从0.9347大幅拖降至0.8974（-3.73pp），该效应与"树先验对嵌入层的刚性约束与Sparsemax注意力的自由交互学习存在结构性冲突"的假设一致，但替代解释（正则化强度不当、与KD的交互效应等）尚未完全排除。本文还结合SHAP分析、注意力可视化和商业成本矩阵，从可解释性和业务成本两个维度为模型选择提供实证依据。
+
+\vspace{1em}
+\noindent\textbf{关键词：}信用卡欺诈检测；深度神经网络；FT-Transformer；DeepFM；知识蒸馏；树归纳偏置；模型可解释性
+\end{abstract}
+
+% English Abstract
+\begin{center}
+{\Large\textbf{Abstract}}
+\end{center}
+\noindent
+Credit card fraud detection remains one of the most challenging problems in financial risk management, where extreme class imbalance poses significant difficulties for standard classification approaches. This paper compares two heterogeneous deep neural network architectures (FT-Transformer and DeepFM) against the XGBoost baseline, and proposes a tree-supervised knowledge distillation method that transfers XGBoost's axis-aligned inductive bias to deep models via soft-label distillation and feature-importance regularization. Experiments use the Kaggle 2023 Credit Card Fraud Detection dataset comprising 568,000 transactions (approximately 150,000 after inducing realistic class imbalance). Results show that DeepFM (AUPRC=0.9336) achieves statistically indistinguishable performance from XGBoost (0.9331); FT-Transformer with Sparsemax achieves AUPRC=0.9179 after a +4.4pp improvement over Softmax. A critical ablation reveals that soft-label distillation (3A) benefits both architectures under the studied conditions — FTT+KD reaches AUPRC=0.9347 (+1.68pp), DeepFM+KD reaches 0.9495 (+1.59pp) — while feature-importance regularization (TreeReg, 3B) causes a substantial -3.73pp drop on FTT, consistent with a structural antagonism between tree-derived embedding constraints and self-attention, though alternative explanations (e.g., regularization strength, interaction with KD) remain to be excluded. Combined with SHAP analysis, attention visualization, and business cost matrices, this paper provides empirical evidence for model selection from both interpretability and cost perspectives.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} Credit Card Fraud Detection; Deep Neural Networks; FT-Transformer; DeepFM; Knowledge Distillation; Tree Inductive Bias; Model Interpretability

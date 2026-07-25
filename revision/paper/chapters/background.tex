@@ -1,0 +1,220 @@
+% =============================================================================
+% 第2章：FT-Transformer架构与自注意力机制
+% =============================================================================
+
+\section{FT-Transformer与自注意力机制}
+\label{sec:background}
+
+本章介绍FT-Transformer的架构原理，并在此基础上建立理解注意力塌缩所需的概念框架。全章共分四部分：（1）FT-Transformer的四层架构，（2）Softmax与Sparsemax的数学性质对比，（3）自注意力的信息论视角，（4）注意力塌缩的形式化定义。与原始论文\cite{gorishniy2021revisiting}的叙述不同，本文的架构讲解始终围绕一个核心问题展开——自注意力机制在表格数据上的有效运行需要满足哪些前提条件？
+
+\subsection{FT-Transformer架构}
+
+FT-Transformer（Feature Tokenizer + Transformer）由Gorishniy等人\cite{gorishniy2021revisiting}于2021年提出，其核心思想是将表格数据的每个数值特征视为一个独立的"词元"（Token），通过Transformer编码器的自注意力机制学习特征间的全局交互。图\ref{fig:ftt_arch}以流程图呈现了从原始特征到最终预测的完整数据流。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=0.5cm,
+    box/.style={rectangle, draw=black!70, rounded corners=3pt, minimum width=5.0cm, minimum height=0.62cm, align=center, font=\footnotesize},
+    smallbox/.style={rectangle, draw=black!50, rounded corners=2pt, minimum width=2.2cm, minimum height=0.55cm, align=center, font=\scriptsize},
+    arrow/.style={-{Stealth[scale=1.0]}, thick, black!60},
+]
+    \node[box, fill=blue!5] (input) {输入 $\mathbf{x} = [x_1, \dots, x_{29}] \in \mathbb{R}^{29}$};
+    \node[box, fill=blue!8, below=of input] (tokenizer) {Feature Tokenizer: $T_j = x_j \cdot \bm{W}_j + \bm{b}_j$ \quad ($\bm{W}_j,\bm{b}_j \in \mathbb{R}^{64}$)};
+    \node[box, fill=green!5, below=of tokenizer] (cls) {前置 [CLS]: $\mathbf{Z} = [T_{\mathrm{CLS}}, T_1, \dots, T_{29}] \in \mathbb{R}^{30 \times 64}$};
+    \node[box, fill=orange!8, below=of cls] (encoder) {Transformer Encoder $\times 3$\\(Sparsemax多头自注意力 + FFN + 残差连接 + LayerNorm)};
+    \node[box, fill=green!5, below=of encoder] (extract) {提取 [CLS] 表示: $\mathbf{h}_{\mathrm{CLS}}^{(3)} \in \mathbb{R}^{64}$};
+    \node[box, fill=red!5, below=of extract] (head) {LayerNorm $\to$ Linear($64{\to}1$) $\to$ Sigmoid};
+    \node[box, fill=red!8, below=of head] (output) {输出: $\hat{y} \in [0, 1]$ （欺诈概率）};
+
+    \draw[arrow] (input) -- (tokenizer);
+    \draw[arrow] (tokenizer) -- (cls);
+    \draw[arrow] (cls) -- (encoder);
+    \draw[arrow] (encoder) -- (extract);
+    \draw[arrow] (extract) -- (head);
+    \draw[arrow] (head) -- (output);
+\end{tikzpicture}
+\caption{FT-Transformer架构流程图。29个数值特征经Feature Tokenizer映射为64维嵌入向量，前置可学习的[CLS] Token后送入3层Transformer编码器，最终由[CLS]输出经LayerNorm和线性层得到预测概率。}
+\label{fig:ftt_arch}
+\end{figure}
+
+\subsubsection{Feature Tokenizer：数值特征嵌入}
+
+传统做法将表格数据的一行直接输入MLP（$\mathbb{R}^{29} \to \text{Linear}(29, 64)$），等价于对所有特征使用同一个投影矩阵。FT-Transformer的关键创新在于为每个特征$j$分配独立的可学习参数$\bm{W}_j$和$\bm{b}_j$：
+
+\begin{equation}
+T_j = x_j \cdot \bm{W}_j + \bm{b}_j \in \mathbb{R}^{d_{model}}
+\label{eq:tokenize}
+\end{equation}
+
+其中$\bm{W}_j$的作用不是线性变换（因为$x_j$是标量），而是\textbf{特征专属的嵌入方向}——将标量特征值沿特定方向拉伸为$d_{model}$维向量。这一设计的关键意图是为后续的自注意力提供可区分的Query/Key：不同特征的嵌入位于向量空间的不同方向，使得Query-Key内积能够产生有信息量的注意力分布。然而，这一设计的有效性取决于一个隐含假设——特征本身具有足够的异质性，使得嵌入层能够学习到有意义的方向差异。本文的第\ref{sec:diagnosis}节将检验这一假设在PCA匿名化特征空间中的成立程度。
+
+\subsubsection{[CLS] Token与分类头}
+
+借鉴BERT\cite{devlin2018bert}的设计，FT-Transformer在所有特征令牌前添加一个可学习的[CLS] Token $T_{\mathrm{CLS}} \in \mathbb{R}^{d_{model}}$，形成长度为30的序列$\mathbf{Z}_0 = [T_{\mathrm{CLS}}, T_1, \dots, T_{29}]$。[CLS]自身不携带任何特征信息（随机初始化），但在经过多层自注意力后，它通过Query机制从所有特征令牌中聚合对分类最有用的信息。可以理解为：[CLS]是模型学会的"最佳问题"，而每个特征令牌提供该特征的"回答"（Key-Value pair）。最终仅[CLS]的输出被送入分类头（LayerNorm $\to$ Linear($64{\to}1$) $\to$ Sigmoid）。
+
+\subsubsection{多头自注意力与Transformer编码器}
+
+这是FT-Transformer的核心计算引擎。给定输入序列$\mathbf{Z}$（$S=30$个令牌），单头自注意力执行：
+
+\begin{equation}
+\mathrm{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \mathrm{Sparsemax}\!\left(\frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}}\right) \mathbf{V}
+\label{eq:attention}
+\end{equation}
+
+其中$\mathbf{Q} = \mathbf{Z}\mathbf{W}_Q, \mathbf{K} = \mathbf{Z}\mathbf{W}_K, \mathbf{V} = \mathbf{Z}\mathbf{W}_V$，$d_k = d_{model} / n_{heads} = 8$。除以$\sqrt{d_k}$防止内积过大导致梯度消失。多头设计使模型在8个不同的表示子空间中同时计算注意力，将各头输出拼接后经$\mathbf{W}_O$投影回$d_{model}$维。
+
+每个Transformer编码器层包含两个子层，各有残差连接和Pre-Norm：
+\begin{equation}
+\begin{aligned}
+\mathbf{Z}' &= \mathrm{LayerNorm}\big(\mathbf{Z} + \mathrm{MultiHead}(\mathbf{Z})\big) \\
+\mathbf{Z}'' &= \mathrm{LayerNorm}\big(\mathbf{Z}' + \mathrm{FFN}(\mathbf{Z}')\big)
+\end{aligned}
+\end{equation}
+
+FFN为两层结构，采用ReGLU激活\cite{gorishniy2021revisiting}：$\mathrm{FFN}(\mathbf{x}) = (\mathrm{ReLU}(\mathbf{x}\mathbf{W}_g + \mathbf{b}_g) \odot (\mathbf{x}\mathbf{W}_v + \mathbf{b}_v))\mathbf{W}_2 + \mathbf{b}_2$，中间维度$d_{ffn}=256$。残差连接确保即使注意力学不到有用信息，梯度仍能通过恒等路径回传。
+
+本文配置为：$d_{model}=64$, $n_{heads}=8$, $n_{layers}=3$, $d_{ffn}=256$，总参数量203,841。
+
+\subsection{Softmax与Sparsemax：两种归一化的数学性质对比}
+
+注意力归一化函数的选择在本文中占据核心位置。以下从数学性质和信息编码能力两个维度对比Softmax与Sparsemax。
+
+\subsubsection{Softmax的信息论属性}
+
+Softmax将logits向量$\mathbf{z} \in \mathbb{R}^d$映射为概率分布：
+
+\begin{equation}
+\mathrm{Softmax}(\mathbf{z})_i = \frac{e^{z_i}}{\sum_{j=1}^d e^{z_j}}
+\label{eq:softmax}
+\end{equation}
+
+Softmax可被理解为求解以下优化问题的解：在约束$\sum_i p_i = 1, p_i \geq 0$下，最大化熵$H(\mathbf{p}) = -\sum_i p_i \log p_i$加上与$\mathbf{z}$的内积$\langle \mathbf{p}, \mathbf{z} \rangle$。从信息论角度看，Softmax在"匹配logits"与"保持最大熵"之间寻求平衡。这一性质在语义空间中有其合理性：当模型不确定哪两个token更相关时，保留一定概率质量给所有候选是一种审慎策略。
+
+然而，最大熵倾向也意味着Softmax\textbf{永远不能输出零概率}——因为$e^{z_i} > 0$恒成立，即使$z_i$极低，其对应的$p_i$仍为正数。当所有logits值接近时（如本文情境中Query-Key内积高度同质化），Softmax输出将退化为接近均匀分布$\mathbf{p} \approx [1/d, \dots, 1/d]$。这一特性在需要明确特征取舍的场景中构成系统性缺陷。
+
+\subsubsection{Sparsemax的闭式解与稀疏性}
+
+Sparsemax\cite{martins2016sparsemax}采用欧氏投影到概率单纯形，而非信息论投影：
+
+\begin{equation}
+\mathrm{Sparsemax}(\mathbf{z}) = \arg\min_{\mathbf{p} \in \Delta^{d-1}} \|\mathbf{p} - \mathbf{z}\|_2^2
+\label{eq:sparsemax}
+\end{equation}
+
+其闭式解为：
+
+\begin{equation}
+\mathrm{Sparsemax}(\mathbf{z})_i = \max(z_i - \tau(\mathbf{z}), 0)
+\label{eq:sparsemax_closed}
+\end{equation}
+
+其中$\tau(\mathbf{z})$是唯一满足$\sum_i \max(z_i - \tau, 0) = 1$的阈值。算法复杂度为$O(d \log d)$——对logits降序排序，找到满足$1 + k z_{(k)} > \sum_{j\leq k} z_{(j)}$的最大$k$，计算$\tau = (\sum_{j\in S} z_{(j)} - 1)/k$。
+
+Sparsemax与Softmax的关键区别在于\textbf{边界解}：当logits值低于阈值$\tau$时，Sparsemax输出精确零——该特征被完全排除在注意力聚集之外。这一性质在表格数据上具有直接的操作意义：使模型能够明确区分"值得关注的特征"和"应忽略的特征"。
+
+需要指出，Sparsemax的稀疏化效应与其隐式的熵调节效应在本文实验中未分离。Softmax+温度缩放（temperature scaling）可能通过不同机制实现部分类似的校准改善，这一替代路径留待未来验证。
+
+\subsection{自注意力的信息论视角}
+
+上述架构描述提供了一个可操作的机制理解。但理解注意力塌缩还需要一个更深层的概念框架：自注意力本质上是在做什么？
+
+从信息论角度，自注意力中的Query-Key内积$\langle \mathbf{q}_i, \mathbf{k}_j \rangle$可被视为特征$i$与特征$j$之间\textbf{互信息}（mutual information）的代理变量。在NLP中，一个词的Query向量编码了"我在寻找什么类型的上下文信息"，而另一个词的Key向量编码了"我能提供什么类型的信息"——当两者匹配时，内积较大，注意力权重较高，信息从特征$j$流向特征$i$。
+
+这一机制有效运行的前提是：\textbf{嵌入空间中的向量方向能够可靠地编码输入变量的"信息类型"身份}。当特征具有明确的语义身份时（如文本中的词性、图像中的空间位置），嵌入层可以通过学习将不同身份映射到不同方向，使得Query-Key内积产生有意义的差异。然而，当特征的身份是纯粹的数值索引（如PCA成分的序号），且特征的数值分布高度同构时，嵌入层将面临一个根本性困难：它需要从几乎相同的输入分布中学习出截然不同的嵌入方向——而梯度信号本身无法提供足够的区分性压力（因为所有特征的数值模式相似，对损失函数的梯度贡献也相似）。
+
+这一分析表明，FT-Transformer在PCA匿名化空间中的注意力困难不是参数数量不足的问题，而是\textbf{输入表征的信息结构不足以支撑注意力机制的前提假设}的问题。本文将这一困难称为嵌入空间的"语义真空"（semantic vacuum）。
+
+\subsection{注意力塌缩的形式化定义}
+
+基于以上分析，本文给出注意力塌缩的严格定义，为第\ref{sec:diagnosis}节的实证诊断建立基准。
+
+\begin{center}
+\fbox{\begin{minipage}{0.92\textwidth}
+\textbf{定义1（注意力塌缩，Attention Collapse）}：设$\mathbf{A} \in \mathbb{R}^{d \times d}$为自注意力权重矩阵，其中$\mathbf{A}_{ij}$为特征$i$对特征$j$的注意力权重（满足$\sum_j \mathbf{A}_{ij} = 1$）。若存在$\epsilon > 0$使得对所有$i, j$有：
+
+\begin{equation}
+|\mathbf{A}_{ij} - \tfrac{1}{d}| \leq \epsilon
+\end{equation}
+
+且$\epsilon \ll 1/d$（即$\epsilon/ (1/d) \to 0$），则称注意力发生了\textbf{$\epsilon$-塌缩}。其操作性判据为：
+\begin{itemize}
+    \item 权重标准差$\sigma(\{\mathbf{A}_{ij}\}) \ll 1/d$，
+    \item 注意力分布$\mathbf{A}$与均匀分布$\mathcal{U} = [1/d, \dots, 1/d]$的Jensen-Shannon散度$D_{JS}(\mathbf{A} \parallel \mathcal{U}) \approx 0$。
+\end{itemize}
+\end{minipage}}
+\end{center}
+
+在本文的实验设置中（$d=29$个特征），均匀基线为$1/29 \approx 0.0345$。Softmax FTT的实测注意力权重全部落在$[0.0327, 0.0342]$区间内，标准差$\sigma = 0.0004 \ll 0.0345$，满足$\epsilon$-塌缩条件。
+
+重要的是，注意力塌缩不意味着Attention层"什么都不做"——塌缩的注意力矩阵等价于一个\textbf{均值池化}操作：$\sum_j (1/d) \mathbf{v}_j = \text{mean}(\mathbf{V})$。模型仍然可以基于均值池化后的聚合特征进行分类，但丧失了自注意力的核心价值——根据特征间的条件关系进行有区分的特征加权。
+
+\subsection{LOR-MIM：数据端对称破缺}
+
+第\ref{sec:results}节和第\ref{sec:diagnosis}节将评估一种从数据端打破PCA对称性的方法——局部正交松弛（Local Orthogonality Relaxation via Mutual Information-gated Mixup, LOR-MIM）。该方法不修改FT-Transformer的架构，而是在特征输入之前施加样本自适应的线性混合，使PCA的全局正交结构在局部被松弛。
+
+\subsubsection{动机}
+
+PCA强制28个V特征全局正交，使它们在数值上完全对称。LOR-MIM的核心假设是：\textbf{任何形式的非均匀结构——即使来自随机扰动——都能为后续的自注意力提供可区分的特征交互基础}。这一假设受mixup\cite{zhang2018mixup}和Manifold Mixup\cite{verma2019manifold}的启发——后者通过隐层插值为深度网络提供正则化，而LOR-MIM将"插值"概念迁移至特征输入层，以打破PCA对称性。额度（Amount）作为数据中唯一保留原始语义的特征，被用作条件变量的自然选择。
+
+\subsubsection{方法}
+
+LOR-MIM包含三个阶段：离线分组（训练前执行一次）、在线门控混合（每笔交易执行）、端到端训练。
+
+\smallskip
+\noindent\textbf{阶段一：MI驱动的特征分组（离线）。}
+\begin{enumerate}
+    \item \textbf{计算互信息。} 对每个$V_j$，与Amount各自离散化为20个等宽箱，统计$20\times 20$联合频次表\cite{kraskov2004estimating}：
+    \[
+    \mathrm{MI}(V_j; \mathrm{Amount}) = \sum_{a} \sum_{v} P(v,a) \cdot \log\frac{P(v,a)}{P(v) \cdot P(a)}
+    \]
+    共得28个标量MI值\cite{peng2005feature}。实测范围0.0015--0.0020——所有V特征与Amount的关系几乎相同。
+    \item \textbf{构建亲和矩阵。} 将MI值归一化至$[0,1]$，构造$\mathbf{A}_{ij} = 1 - |\mathrm{MI}_i - \mathrm{MI}_j| \in \mathbb{R}^{28 \times 28}$。MI值越接近$\to$亲和度越高$\to A_{ij}$越接近1。
+    \item \textbf{谱聚类。} 构建$\mathbf{L} = \mathbf{D} - \mathbf{A}$（$\mathbf{D}_{ii} = \sum_j A_{ij}$），取$\mathbf{L}$最小的4个非零特征向量作为V特征的嵌入坐标，执行K-means（$K{=}5$）\cite{ng2001spectral}。输出$\mathcal{G} = \{G_1, \dots, G_5\}$（[9, 8, 5, 3, 3]）。
+\end{enumerate}
+
+\smallskip
+\noindent\textbf{阶段二：门控混合（在线，逐样本）。}
+\begin{enumerate}
+    \setcounter{enumi}{3}
+    \item \textbf{门控。} 采用条件计算范式\cite{han2021dynamic}，小型MLP以标准化Amount为输入（1$\to$16$\to$5, ReLU, Softmax），输出组权重$\boldsymbol{\alpha} = [\alpha_1,\dots,\alpha_5]$，$\sum\alpha_k=1$。
+    \item \textbf{组内混合。} 每组$k$一个可学习矩阵$M_k \in \mathbb{R}^{d_k \times d_k}$（初始化为$I + \mathcal{N}(0,0.05)$），变换为$\mathbf{v}'_{G_k} = M_k \cdot \mathbf{v}_{G_k}$，乘以$\alpha_k$后拼接各组结果，还原V1--V28原始顺序。Amount不变。
+    \item \textbf{送入FT-Transformer。} 变换后的$[\mathbf{v}', \mathrm{Amount}]$输入标准FT-Transformer。
+\end{enumerate}
+
+\smallskip
+\noindent\textbf{阶段三：端到端训练。} LOR-MIM的305个参数与FT-Transformer联合优化——梯度从Focal Loss经Transformer回传至$M_k$和门控MLP。算法\ref{alg:lor_mim}总结完整流程。
+
+\begin{center}
+\fbox{\begin{minipage}{0.9\textwidth}
+\textbf{算法1：LOR-MIM 完整流程}\\[2pt]
+
+\noindent\textit{// 阶段一：离线分组（训练前，执行一次）}
+\begin{enumerate}
+    \itemsep0pt
+    \item 对$V_1$至$V_{28}$：计算与Amount的互信息（各离散化为20箱）
+    \item 归一化28个MI值 $\to$ 构建亲和矩阵$\mathbf{A}_{ij} = 1-|\mathrm{MI}_i-\mathrm{MI}_j|$
+    \item $\mathbf{L} \gets \mathbf{D}-\mathbf{A}$，取$\mathbf{L}$最小的4个非零特征向量构成嵌入坐标
+    \item 在嵌入坐标上K-means ($K{=}5$) $\to$ 分组$\mathcal{G} = \{G_1,\dots,G_5\}$
+\end{enumerate}
+\textit{// 阶段二：在线变换（每笔交易）}
+\begin{enumerate}
+    \setcounter{enumi}{4}
+    \itemsep0pt
+    \item $\boldsymbol{\alpha} \gets \operatorname{Softmax}(\operatorname{MLP}(\mathrm{Amount}))$ \hfill // 门控$(1{\to}16{\to}5)$
+    \item 对每组$k$：$\mathbf{v}'_{G_k} \gets \alpha_k \cdot (M_k \cdot \mathbf{v}_{G_k})$ \hfill // $M_k$可学习
+    \item 拼接各组，还原V1--V28顺序，拼接Amount $\to$ 29维向量
+\end{enumerate}
+\textit{// 阶段三：训练}
+\begin{enumerate}
+    \setcounter{enumi}{7}
+    \itemsep0pt
+    \item 变换向量送入FT-Transformer，Focal Loss端到端联合优化
+\end{enumerate}
+\smallskip
+\noindent\textbf{额外参数：}305个（0.15\%）\quad\textbf{关键约束：}$M_k$初始化为$I+\mathcal{N}(0,0.05)$
+\end{minipage}}
+\label{alg:lor_mim}
+\end{center}
+
+需要指出，阶段一的MI实测值极低（0.0015--0.0020），亲和矩阵近乎全1，谱聚类分组与随机分组差异有限。然而第\ref{sec:diagnosis}节的实验将表明，即使是近似随机的分组也能有效打破对称——对称破缺对分组精度的要求极低。

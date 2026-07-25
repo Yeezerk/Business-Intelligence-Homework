@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering
+\caption{Model Performance Comparison (sorted by AUPRC)}
+\label{tab:model_comparison}
+\small
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Model} & \textbf{AUPRC} & \textbf{ROC-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{Cost} & \textbf{ECE} \\
+\midrule
+DeepFM+KD & 0.9495 & 0.9988 & 0.9058 & 0.9099 & 0.9018 & 120 & 0.0008 \\
+FTT+KD & 0.9347 & 0.9953 & 0.9279 & 0.9364 & 0.9196 & 97 & 0.0007 \\
+DeepFM & 0.9336 & 0.9979 & 0.8938 & 0.8860 & 0.9018 & 123 & 0.0394 \\
+XGBoost & 0.9331 & 0.9979 & 0.8750 & 0.9479 & 0.8125 & 215 & 0.0006 \\
+FT-Transformer & 0.9179 & 0.9925 & 0.9196 & 0.9196 & 0.9196 & 99 & 0.0120 \\
+FTT+KD+TreeReg & 0.8974 & 0.9945 & 0.8848 & 0.9143 & 0.8571 & 169 & 0.0010 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,59 @@
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ─── LaTeX (compilation artifacts) ───
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.bbl-SAVE-ERROR
+
+# ─── IDE / Editor ───
+.vscode/
+.trae/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ─── Large data & model outputs ───
+outputs/raw/
+outputs/processed/
+outputs/models/
+revision/outputs/raw/
+revision/outputs/processed/
+revision/outputs/models/
+code/data/
+code/models/
+code/training/
+
+# ─── Claude local settings ───
+.claude/settings.local.json
+
+# ─── Misc ───
+*.bak
+*.tmp
